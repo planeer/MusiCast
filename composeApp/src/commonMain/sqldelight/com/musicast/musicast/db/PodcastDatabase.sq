@@ -1,0 +1,95 @@
+CREATE TABLE podcast (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT "",
+    feed_url TEXT NOT NULL UNIQUE,
+    artwork_url TEXT,
+    last_updated INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE episode (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    podcast_id INTEGER NOT NULL REFERENCES podcast(id) ON DELETE CASCADE,
+    guid TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT "",
+    audio_url TEXT NOT NULL,
+    duration_ms INTEGER,
+    publish_date INTEGER,
+    is_played INTEGER NOT NULL DEFAULT 0,
+    download_path TEXT,
+    analysis_status TEXT NOT NULL DEFAULT 'NONE',
+    segments_data TEXT,
+    playback_position_ms INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(podcast_id, guid)
+);
+
+CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+-- Settings queries
+getSetting:
+SELECT value FROM app_settings WHERE key = ?;
+
+setSetting:
+INSERT OR REPLACE INTO app_settings(key, value) VALUES (?, ?);
+
+-- Podcast queries
+selectAllPodcasts:
+SELECT * FROM podcast ORDER BY title ASC;
+
+selectPodcastById:
+SELECT * FROM podcast WHERE id = ?;
+
+selectPodcastByFeedUrl:
+SELECT * FROM podcast WHERE feed_url = ?;
+
+insertPodcast:
+INSERT INTO podcast(title, description, feed_url, artwork_url, last_updated)
+VALUES (?, ?, ?, ?, ?);
+
+lastInsertId:
+SELECT last_insert_rowid();
+
+updatePodcast:
+UPDATE podcast SET title = ?, description = ?, artwork_url = ?, last_updated = ? WHERE id = ?;
+
+deletePodcast:
+DELETE FROM podcast WHERE id = ?;
+
+-- Episode queries
+selectEpisodesByPodcast:
+SELECT * FROM episode WHERE podcast_id = ? ORDER BY publish_date DESC;
+
+selectEpisodeById:
+SELECT * FROM episode WHERE id = ?;
+
+selectEpisodeByGuid:
+SELECT * FROM episode WHERE podcast_id = ? AND guid = ?;
+
+insertEpisode:
+INSERT OR IGNORE INTO episode(podcast_id, guid, title, description, audio_url, duration_ms, publish_date)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+updateDownloadPath:
+UPDATE episode SET download_path = ? WHERE id = ?;
+
+updateAnalysisStatus:
+UPDATE episode SET analysis_status = ? WHERE id = ?;
+
+updateSegmentsData:
+UPDATE episode SET segments_data = ? WHERE id = ?;
+
+selectSegmentsData:
+SELECT segments_data FROM episode WHERE id = ?;
+
+updatePlaybackPosition:
+UPDATE episode SET playback_position_ms = ? WHERE id = ?;
+
+markAsPlayed:
+UPDATE episode SET is_played = 1 WHERE id = ?;
+
+markAsUnplayed:
+UPDATE episode SET is_played = 0 WHERE id = ?;
