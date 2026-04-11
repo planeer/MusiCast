@@ -5,7 +5,7 @@ import com.musicast.musicast.data.remote.RssFeedService
 import com.musicast.musicast.domain.model.Episode
 import com.musicast.musicast.domain.model.Podcast
 import kotlinx.coroutines.flow.Flow
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 
 class PodcastRepository(
     private val localDataSource: LocalDataSource,

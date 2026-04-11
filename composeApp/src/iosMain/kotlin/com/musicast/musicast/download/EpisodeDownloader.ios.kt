@@ -2,25 +2,34 @@
 
 package com.musicast.musicast.download
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.darwin.Darwin
+import io.ktor.client.plugins.onDownload
+import io.ktor.client.request.prepareGet
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.utils.io.readAvailable
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.update
 import platform.Foundation.NSData
+import platform.Foundation.create
 import platform.Foundation.NSDocumentDirectory
+import platform.Foundation.NSFileHandle
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
-import platform.Foundation.NSURL
 import platform.Foundation.NSUserDomainMask
-import platform.Foundation.dataWithContentsOfURL
-import platform.Foundation.writeToFile
+import platform.Foundation.closeFile
+import platform.Foundation.fileHandleForWritingAtPath
+import platform.Foundation.writeData
 
 actual class EpisodeDownloader {
+
+    private val httpClient = HttpClient(Darwin)
 
     private val downloadDir: String
         get() {
@@ -44,26 +53,53 @@ actual class EpisodeDownloader {
         emit(pending)
 
         try {
-            val nsUrl = NSURL.URLWithString(url) ?: throw Exception("Invalid URL: $url")
-            val data = NSData.dataWithContentsOfURL(nsUrl)
-                ?: throw Exception("Failed to download: $url")
+            httpClient.prepareGet(url) {
+                onDownload { bytesSentTotal, contentLength ->
+                    // Push progress into the StateFlow that the UI observes.
+                    // The UI only shows the progress bar when status == DOWNLOADING
+                    // && totalBytes > 0, so a non-null contentLength is required
+                    // for the bar to render.
+                    val progress = DownloadProgress(
+                        episodeId = episodeId,
+                        bytesDownloaded = bytesSentTotal,
+                        totalBytes = contentLength ?: -1L,
+                        status = DownloadStatus.DOWNLOADING,
+                    )
+                    _activeDownloads.update { it + (episodeId to progress) }
+                }
+            }.execute { response ->
+                val channel = response.bodyAsChannel()
 
-            val downloading = DownloadProgress(
-                episodeId = episodeId,
-                bytesDownloaded = data.length.toLong(),
-                totalBytes = data.length.toLong(),
-                status = DownloadStatus.DOWNLOADING,
-            )
-            _activeDownloads.update { it + (episodeId to downloading) }
-            emit(downloading)
+                // Ensure the destination file exists and open it for writing.
+                NSFileManager.defaultManager.createFileAtPath(targetPath, null, null)
+                val handle = NSFileHandle.fileHandleForWritingAtPath(targetPath)
+                    ?: throw Exception("Cannot open file for writing: $targetPath")
 
-            val written = data.writeToFile(targetPath, atomically = true)
-            if (!written) throw Exception("Failed to write file")
+                try {
+                    val buffer = ByteArray(8 * 1024)
+                    while (!channel.isClosedForRead) {
+                        val read = channel.readAvailable(buffer, 0, buffer.size)
+                        if (read > 0) {
+                            buffer.usePinned { pinned ->
+                                val nsData = NSData.create(
+                                    bytes = pinned.addressOf(0),
+                                    length = read.toULong(),
+                                )
+                                handle.writeData(nsData)
+                            }
+                        } else if (read < 0) {
+                            break
+                        }
+                    }
+                } finally {
+                    handle.closeFile()
+                }
+            }
 
             val completed = DownloadProgress(
                 episodeId = episodeId,
-                bytesDownloaded = data.length.toLong(),
-                totalBytes = data.length.toLong(),
+                bytesDownloaded = 0L,
+                totalBytes = 0L,
                 status = DownloadStatus.COMPLETED,
             )
             _activeDownloads.update { it - episodeId }
@@ -74,7 +110,7 @@ actual class EpisodeDownloader {
             _activeDownloads.update { it - episodeId }
             emit(failed)
         }
-    }.flowOn(Dispatchers.IO)
+    }
 
     actual fun getLocalPath(episodeId: Long): String? {
         val path = "$downloadDir/episode_$episodeId.mp3"

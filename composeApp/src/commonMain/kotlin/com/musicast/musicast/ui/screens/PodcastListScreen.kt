@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -48,6 +49,10 @@ fun PodcastListScreen(
     val state by viewModel.state.collectAsState()
 
     Scaffold(
+        // The outer Scaffold in App.kt already pushes content below the
+        // system bars (status bar + home indicator). Setting these insets
+        // to zero prevents this inner Scaffold from double-padding.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
             FloatingActionButton(onClick = { viewModel.showAddDialog() }) {
                 Text("+", style = MaterialTheme.typography.headlineSmall)

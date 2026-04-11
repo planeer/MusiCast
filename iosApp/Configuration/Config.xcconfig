@@ -5,3 +5,7 @@ PRODUCT_BUNDLE_IDENTIFIER=com.musicast.musicast.musicast$(TEAM_ID)
 
 CURRENT_PROJECT_VERSION=1
 MARKETING_VERSION=1.0
+
+// SQLDelight's native driver (co.touchlab:sqliter) calls into the system
+// libsqlite3 but does not link it itself, so the app target must.
+OTHER_LDFLAGS=$(inherited) -lsqlite3

@@ -2,40 +2,55 @@
 
 package com.musicast.musicast.audio
 
+import cnames.structs.TfLiteInterpreter
+import cnames.structs.TfLiteModel
 import cocoapods.TensorFlowLiteC.TfLiteInterpreterAllocateTensors
 import cocoapods.TensorFlowLiteC.TfLiteInterpreterCreate
 import cocoapods.TensorFlowLiteC.TfLiteInterpreterDelete
 import cocoapods.TensorFlowLiteC.TfLiteInterpreterGetInputTensor
 import cocoapods.TensorFlowLiteC.TfLiteInterpreterGetOutputTensor
 import cocoapods.TensorFlowLiteC.TfLiteInterpreterInvoke
-import cocoapods.TensorFlowLiteC.TfLiteModelCreate
+import cocoapods.TensorFlowLiteC.TfLiteInterpreterResizeInputTensor
+import cocoapods.TensorFlowLiteC.TfLiteModelCreateFromFile
 import cocoapods.TensorFlowLiteC.TfLiteModelDelete
 import cocoapods.TensorFlowLiteC.TfLiteTensorCopyFromBuffer
 import cocoapods.TensorFlowLiteC.TfLiteTensorCopyToBuffer
 import cocoapods.TensorFlowLiteC.TfLiteTensorByteSize
 import cocoapods.TensorFlowLiteC.kTfLiteOk
-import kotlinx.cinterop.addressOf
-import kotlinx.cinterop.usePinned
+import kotlinx.cinterop.*
 import platform.Foundation.NSBundle
 
 class IosYamNetClassifier : YamNetClassifier {
 
-    private var model: kotlinx.cinterop.CPointer<cocoapods.TensorFlowLiteC.TfLiteModel>? = null
-    private var interpreter: kotlinx.cinterop.CPointer<cocoapods.TensorFlowLiteC.TfLiteInterpreter>? = null
+    private var model: CPointer<TfLiteModel>? = null
+    private var interpreter: CPointer<TfLiteInterpreter>? = null
 
     override fun loadModel(): Boolean {
         return try {
             val modelPath = NSBundle.mainBundle.pathForResource("yamnet", ofType = "tflite")
                 ?: return false
 
-            model = TfLiteModelCreate(modelPath) ?: return false
-            interpreter = TfLiteInterpreterCreate(model, null) ?: run {
+            model = TfLiteModelCreateFromFile(modelPath) ?: return false
+            val interp = TfLiteInterpreterCreate(model, null) ?: run {
                 TfLiteModelDelete(model)
                 model = null
                 return false
             }
+            interpreter = interp
 
-            val status = TfLiteInterpreterAllocateTensors(interpreter)
+            // YAMNet's TFLite model ships with a dynamic input shape. Before
+            // we can allocate tensors and copy samples in, we have to resize
+            // input 0 to [15600] (0.975s of 16kHz mono). Without this, every
+            // TfLiteTensorCopyFromBuffer call below silently fails with a
+            // size mismatch and `classify()` returns null for every window.
+            val resizeOk = memScoped {
+                val dims = allocArray<IntVar>(1)
+                dims[0] = AudioConstants.YAMNET_WINDOW_SAMPLES
+                TfLiteInterpreterResizeInputTensor(interp, 0, dims, 1) == kTfLiteOk
+            }
+            if (!resizeOk) return false
+
+            val status = TfLiteInterpreterAllocateTensors(interp)
             status == kTfLiteOk
         } catch (e: Exception) {
             e.printStackTrace()

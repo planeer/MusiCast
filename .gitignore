@@ -1,3 +1,14 @@
+# Android Studio
+/*/build/
+/*/local.properties
+/*/out
+/*/*/build
+/*/*/production
+captures/
+.navigation/
+*.ipr
+*~
+*.swp
 *.iml
 .kotlin
 .gradle
@@ -10,10 +21,39 @@ local.properties
 captures
 .externalNativeBuild
 .cxx
+!/gradle/wrapper/gradle-wrapper.jar
+
+### Xcode ###
 *.xcodeproj/*
 !*.xcodeproj/project.pbxproj
 !*.xcodeproj/xcshareddata/
-!*.xcodeproj/project.xcworkspace/
-!*.xcworkspace/contents.xcworkspacedata
+!*.xcworkspace/contents.xcworkspacedata/
+/*.gcno
 **/xcshareddata/WorkspaceSettings.xcsettings
-node_modules/
+*.xcuserstate
+*.xcscheme
+*.xcworkspace
+xcuserdata/
+
+# CocoaPods
+Pods/
+
+## iOS App packaging
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Android App packaging
+*.apk
+*.ap_
+*.aab
+
+# Generated files
+bin/
+gen/
+*.class
+*.dex
+
+# Gradle files
+.gradle/
+build/

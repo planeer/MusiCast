@@ -47,14 +47,23 @@ class LocalDataSource(private val db: PodcastDatabase) {
         artworkUrl: String?,
         lastUpdated: Long,
     ): Long {
-        db.podcastDatabaseQueries.insertPodcast(
-            title = title,
-            description = description,
-            feed_url = feedUrl,
-            artwork_url = artworkUrl,
-            last_updated = lastUpdated,
-        )
-        return db.podcastDatabaseQueries.lastInsertId().executeAsOne()
+        // Must run inside a transaction: SQLite's last_insert_rowid() is
+        // connection-scoped, and SQLDelight's iOS native driver uses a
+        // connection pool, so a standalone lastInsertId() call can land on a
+        // different pooled connection and return 0. A transaction pins both
+        // statements to the same connection.
+        var insertedId = 0L
+        db.podcastDatabaseQueries.transaction {
+            db.podcastDatabaseQueries.insertPodcast(
+                title = title,
+                description = description,
+                feed_url = feedUrl,
+                artwork_url = artworkUrl,
+                last_updated = lastUpdated,
+            )
+            insertedId = db.podcastDatabaseQueries.lastInsertId().executeAsOne()
+        }
+        return insertedId
     }
 
     fun updatePodcast(id: Long, title: String, description: String, artworkUrl: String?, lastUpdated: Long) {

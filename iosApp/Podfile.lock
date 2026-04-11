@@ -1,0 +1,25 @@
+PODS:
+  - composeApp (1.0):
+    - TensorFlowLiteC (~> 2.14.0)
+  - TensorFlowLiteC (2.14.0):
+    - TensorFlowLiteC/Core (= 2.14.0)
+  - TensorFlowLiteC/Core (2.14.0)
+
+DEPENDENCIES:
+  - composeApp (from `../composeApp`)
+
+SPEC REPOS:
+  trunk:
+    - TensorFlowLiteC
+
+EXTERNAL SOURCES:
+  composeApp:
+    :path: "../composeApp"
+
+SPEC CHECKSUMS:
+  composeApp: 27f96875e9f02aaa11f5c5d1725eafb029c7a171
+  TensorFlowLiteC: a836de9b6e6018665ccc349538bdd2c3b80dd7a5
+
+PODFILE CHECKSUM: 7185fb05cca2e2ac98cc5e3dba870f7043f4a8ab
+
+COCOAPODS: 1.16.2

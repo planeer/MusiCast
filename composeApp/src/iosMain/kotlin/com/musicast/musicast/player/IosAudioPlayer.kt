@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+
 package com.musicast.musicast.player
 
 import kotlinx.coroutines.flow.MutableStateFlow

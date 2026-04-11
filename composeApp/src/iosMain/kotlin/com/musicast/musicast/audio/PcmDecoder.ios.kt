@@ -2,8 +2,8 @@
 
 package com.musicast.musicast.audio
 
+import kotlinx.cinterop.*
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.withContext
 import platform.AVFAudio.AVAudioPCMBuffer
 import platform.AVFAudio.AVAudioFile
@@ -21,7 +21,7 @@ actual class PcmDecoder actual constructor() {
         filePath: String,
         onProgress: (Float) -> Unit,
         onChunk: (FloatArray) -> Unit,
-    ): Boolean = withContext(Dispatchers.IO) {
+    ): Boolean = withContext(Dispatchers.Default) {
         try {
             decodeWithAVAudioFile(NSURL.fileURLWithPath(filePath), onProgress, onChunk)
             true
@@ -35,7 +35,7 @@ actual class PcmDecoder actual constructor() {
         url: String,
         onProgress: (Float) -> Unit,
         onChunk: (FloatArray) -> Unit,
-    ): Boolean = withContext(Dispatchers.IO) {
+    ): Boolean = withContext(Dispatchers.Default) {
         try {
             val nsUrl = NSURL.URLWithString(url) ?: return@withContext false
             val data = NSData.dataWithContentsOfURL(nsUrl) ?: return@withContext false

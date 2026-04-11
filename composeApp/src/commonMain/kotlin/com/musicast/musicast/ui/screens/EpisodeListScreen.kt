@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -51,8 +52,14 @@ fun EpisodeListScreen(
     val state by viewModel.state.collectAsState()
 
     Scaffold(
+        // Outer Scaffold in App.kt already consumed the system-bar insets.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             CenterAlignedTopAppBar(
+                // Outer Scaffold in App.kt already consumed the status-bar
+                // inset; TopAppBar defaults to also adding it, which would
+                // double the top gap.
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 title = {
                     Text(
                         text = podcastTitle,
