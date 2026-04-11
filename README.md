@@ -2,6 +2,12 @@
 
 A Kotlin Multiplatform podcast player for Android and iOS with **automatic music detection** — the app detects when music is playing and temporarily reverts to 1x speed, then returns to your chosen speed when speech resumes. Perfect for music-heavy podcasts where you want to speed through discussion but enjoy the songs at normal tempo.
 
+## Screenshots
+
+| Library | Episodes | Player (2x) | Auto 1x on music | Lock screen |
+|:---:|:---:|:---:|:---:|:---:|
+| <img src="screenshots/MusiCast_1.png" width="180"> | <img src="screenshots/MusiCast_2.png" width="180"> | <img src="screenshots/MusiCast_3.png" width="180"> | <img src="screenshots/MusiCast_4.png" width="180"> | <img src="screenshots/MusiCast_5.png" width="180"> |
+
 ## Features
 
 - **Add podcasts via RSS feed URL** — paste any podcast RSS feed to subscribe
@@ -114,6 +120,8 @@ Make sure `iosApp/iosApp/yamnet.tflite` is included in the Xcode target's **Copy
 6. Set your preferred speed (e.g. 2x) and enable music detection
 7. The app automatically drops to 1x during music and returns to 2x for speech
 
-## License
+## About This Project
 
-This project is for personal use.
+MusiCast is a personal project, not a polished product. It exists because the podcast apps I usually listen to don't offer automatic music detection with auto slow-down — which is a real pain for music-heavy shows, where you want to race through the discussion at 2x but still hear the songs at normal tempo. I couldn't find an app that did this, so I built one for myself.
+
+Since it's strictly for personal use, it was built with heavy AI assistance rather than hand-crafted end-to-end. There's no formal license, no support, no guarantees — use at your own risk. Feel free to fork it or take ideas from it if any of this is useful to you.
