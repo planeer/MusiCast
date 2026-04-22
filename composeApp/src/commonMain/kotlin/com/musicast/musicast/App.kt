@@ -20,6 +20,7 @@ import com.musicast.musicast.data.local.LocalDataSource
 import com.musicast.musicast.data.repository.PodcastRepository
 import com.musicast.musicast.download.EpisodeDownloader
 import com.musicast.musicast.player.PlaybackManager
+import com.musicast.musicast.ui.components.BackGestureHandler
 import com.musicast.musicast.ui.components.MiniPlayer
 import com.musicast.musicast.ui.navigation.Screen
 import com.musicast.musicast.ui.screens.EpisodeListScreen
@@ -55,6 +56,10 @@ fun App() {
         val downloader = koinInject<EpisodeDownloader>()
         val musicDetector = koinInject<MusicDetector>()
         val playbackState by playbackManager.state.collectAsState()
+
+        BackGestureHandler(enabled = backStack.size > 1) {
+            goBack()
+        }
 
         Scaffold(
             bottomBar = {
