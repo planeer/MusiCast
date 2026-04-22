@@ -42,6 +42,8 @@ data class AudioSegment(
     val type: ContentType,
 )
 
+data class EpisodeWithPodcast(val episode: Episode, val podcast: Podcast)
+
 data class PlaybackState(
     val episode: Episode? = null,
     val positionMs: Long = 0L,

@@ -93,3 +93,15 @@ UPDATE episode SET is_played = 1 WHERE id = ?;
 
 markAsUnplayed:
 UPDATE episode SET is_played = 0 WHERE id = ?;
+
+selectDownloadedEpisodesWithPodcast:
+SELECT episode.id, episode.podcast_id, episode.guid,
+       episode.title AS episode_title, episode.description,
+       episode.audio_url, episode.duration_ms, episode.publish_date,
+       episode.is_played, episode.download_path, episode.analysis_status,
+       episode.segments_data, episode.playback_position_ms,
+       podcast.title AS podcast_title, podcast.artwork_url AS podcast_artwork_url
+FROM episode
+JOIN podcast ON episode.podcast_id = podcast.id
+WHERE episode.download_path IS NOT NULL
+ORDER BY episode.publish_date ASC;

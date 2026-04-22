@@ -8,6 +8,7 @@ import com.musicast.musicast.domain.model.AnalysisStatus
 import com.musicast.musicast.domain.model.AudioSegment
 import com.musicast.musicast.domain.model.ContentType
 import com.musicast.musicast.domain.model.Episode
+import com.musicast.musicast.domain.model.EpisodeWithPodcast
 import com.musicast.musicast.domain.model.Podcast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -27,6 +28,12 @@ class LocalDataSource(private val db: PodcastDatabase) {
             .asFlow()
             .mapToOneOrNull(Dispatchers.IO)
             .map { it?.toDomain() }
+
+    fun getDownloadedEpisodesWithPodcast(): Flow<List<EpisodeWithPodcast>> =
+        db.podcastDatabaseQueries.selectDownloadedEpisodesWithPodcast()
+            .asFlow()
+            .mapToList(Dispatchers.IO)
+            .map { list -> list.map { it.toEpisodeWithPodcast() } }
 
     fun getEpisodesByPodcast(podcastId: Long): Flow<List<Episode>> =
         db.podcastDatabaseQueries.selectEpisodesByPodcast(podcastId)

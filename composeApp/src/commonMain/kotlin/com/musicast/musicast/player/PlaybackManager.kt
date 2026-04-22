@@ -166,6 +166,23 @@ class PlaybackManager(
         }
     }
 
+    fun setActiveEpisodeFromExternal(episode: Episode, podcastTitle: String, artworkUrl: String?) {
+        savePosition()
+        segments = emptyList()
+        lastSavedPositionMs = episode.playbackPositionMs
+        _state.update {
+            it.copy(
+                episode = episode,
+                positionMs = episode.playbackPositionMs,
+                isMusicDetected = false,
+                segments = emptyList(),
+                podcastTitle = podcastTitle,
+                artworkUrl = artworkUrl,
+            )
+        }
+        audioPlayer.setSpeed(_state.value.currentSpeed)
+    }
+
     fun setSegments(newSegments: List<AudioSegment>) {
         segments = newSegments
         _state.update { it.copy(segments = newSegments) }

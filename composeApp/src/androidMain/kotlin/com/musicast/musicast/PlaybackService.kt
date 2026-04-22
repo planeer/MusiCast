@@ -11,24 +11,29 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.graphics.drawable.IconCompat
+import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
+import androidx.media3.session.LibraryResult
+import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaNotification
 import androidx.media3.session.MediaSession
-import androidx.media3.session.MediaSessionService
 import androidx.media3.session.MediaStyleNotificationHelper
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.musicast.musicast.data.local.LocalDataSource
+import com.musicast.musicast.domain.model.EpisodeWithPodcast
 import com.musicast.musicast.player.AndroidAudioPlayer
 import com.musicast.musicast.player.AudioPlayer
 import com.musicast.musicast.player.PlaybackManager
@@ -40,14 +45,18 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
+import java.io.File
 
-class PlaybackService : MediaSessionService() {
+class PlaybackService : MediaLibraryService() {
 
-    private var mediaSession: MediaSession? = null
+    private var mediaSession: MediaLibrarySession? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private val audioPlayer: AudioPlayer by inject()
     private val playbackManager: PlaybackManager by inject()
+    private val localDataSource: LocalDataSource by inject()
+
+    private var cachedEpisodes: List<EpisodeWithPodcast> = emptyList()
 
     companion object {
         const val CMD_TOGGLE_SPEED = "TOGGLE_SPEED"
@@ -104,17 +113,13 @@ class PlaybackService : MediaSessionService() {
         super.onCreate()
         Log.d("PlaybackService", "onCreate called")
 
-        // Set custom notification provider BEFORE creating the session
         setMediaNotificationProvider(SpeedAwareNotificationProvider(this))
 
         val exoPlayer = (audioPlayer as AndroidAudioPlayer).player
 
-        // Set metadata on the MediaItem as soon as it's loaded, BEFORE playback
-        // starts. This ensures the MediaSession reports the correct info immediately,
-        // which is needed for Samsung's Now Bar / Dynamic Island to pick it up.
         exoPlayer.addListener(object : Player.Listener {
             override fun onMediaItemTransition(
-                mediaItem: androidx.media3.common.MediaItem?,
+                mediaItem: MediaItem?,
                 @Player.MediaItemTransitionReason reason: Int,
             ) {
                 if (mediaItem != null && mediaItem.mediaMetadata.title == null) {
@@ -132,6 +137,15 @@ class PlaybackService : MediaSessionService() {
                     exoPlayer.replaceMediaItem(exoPlayer.currentMediaItemIndex, updated)
                 }
             }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) {
+                    val savedPos = playbackManager.state.value.positionMs
+                    if (savedPos > 0L && exoPlayer.currentPosition < savedPos - 1000L) {
+                        exoPlayer.seekTo(savedPos)
+                    }
+                }
+            }
         })
 
         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
@@ -140,16 +154,14 @@ class PlaybackService : MediaSessionService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        val session = MediaSession.Builder(this, exoPlayer)
+        val session = MediaLibrarySession.Builder(this, exoPlayer, AutoLibraryCallback())
             .setSessionActivity(sessionActivityIntent)
-            .setCallback(PlaybackSessionCallback())
             .build()
 
         mediaSession = session
-        Log.d("PlaybackService", "MediaSession created")
+        Log.d("PlaybackService", "MediaLibrarySession created")
         updateCustomLayout(playbackManager.state.value.currentSpeed)
 
-        // Observe speed changes to update the speed button label
         serviceScope.launch {
             playbackManager.state
                 .map { it.currentSpeed }
@@ -159,7 +171,6 @@ class PlaybackService : MediaSessionService() {
                 }
         }
 
-        // Observe episode changes to update metadata (for changes during playback)
         serviceScope.launch {
             playbackManager.state
                 .map { Triple(it.episode?.title, it.podcastTitle, it.artworkUrl) }
@@ -170,6 +181,12 @@ class PlaybackService : MediaSessionService() {
                     }
                 }
         }
+
+        serviceScope.launch {
+            localDataSource.getDownloadedEpisodesWithPodcast().collect { list ->
+                cachedEpisodes = list
+            }
+        }
     }
 
     @OptIn(UnstableApi::class)
@@ -177,7 +194,6 @@ class PlaybackService : MediaSessionService() {
         Log.d("PlaybackService", "onStartCommand called")
         val session = mediaSession
         if (session != null) {
-            // Ensure notification channel exists
             val nm = getSystemService(NotificationManager::class.java)
             val channel = NotificationChannel(
                 "playback_channel",
@@ -187,11 +203,6 @@ class PlaybackService : MediaSessionService() {
             nm.createNotificationChannel(channel)
 
             val state = playbackManager.state.value
-            // Post a proper MediaStyle foreground notification with the session token.
-            // This ensures the service is truly foreground, which is required for
-            // Samsung's Now Bar / Dynamic Island to show our session.
-            // Media3's MediaNotificationManager will replace this with the full
-            // notification (with action buttons) shortly after.
             val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
             val contentIntent = PendingIntent.getActivity(
                 this, 0, launchIntent,
@@ -243,7 +254,7 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {
         return mediaSession
     }
 
@@ -257,7 +268,6 @@ class PlaybackService : MediaSessionService() {
     override fun onDestroy() {
         serviceScope.cancel()
         mediaSession?.run {
-            // Don't release the player — it's a Koin singleton shared with the app
             release()
         }
         mediaSession = null
@@ -285,14 +295,9 @@ class PlaybackService : MediaSessionService() {
             .setSessionCommand(SessionCommand(CMD_TOGGLE_SPEED, Bundle.EMPTY))
             .build()
 
-        // Order: -15s, [play/pause auto-inserted], +30s, speed
         return listOf(skipBackButton, skipForwardButton, speedButton)
     }
 
-    /**
-     * Custom notification provider that renders the speed button with a dynamically
-     * generated bitmap showing the current speed text (e.g., "1.5x").
-     */
     @UnstableApi
     private class SpeedAwareNotificationProvider(
         private val appContext: Context,
@@ -311,7 +316,6 @@ class PlaybackService : MediaSessionService() {
                 val sessionCommand = button.sessionCommand
 
                 if (sessionCommand != null) {
-                    // Custom session command (skip back, skip forward, speed)
                     val icon = if (sessionCommand.customAction == CMD_TOGGLE_SPEED) {
                         val speedText = button.displayName?.toString() ?: "1x"
                         IconCompat.createWithBitmap(createSpeedBitmap(speedText))
@@ -329,7 +333,6 @@ class PlaybackService : MediaSessionService() {
                         )
                     )
 
-                    // Include skip buttons in compact view, not speed
                     if (sessionCommand.customAction != CMD_TOGGLE_SPEED
                         && compactIndices.size < 3
                     ) {
@@ -338,7 +341,6 @@ class PlaybackService : MediaSessionService() {
                     actionIndex++
 
                 } else if (button.playerCommand != Player.COMMAND_INVALID) {
-                    // Player command (play/pause)
                     builder.addAction(
                         actionFactory.createMediaAction(
                             mediaSession,
@@ -348,7 +350,6 @@ class PlaybackService : MediaSessionService() {
                         )
                     )
 
-                    // Always include play/pause in compact view
                     if (compactIndices.size < 3) {
                         compactIndices.add(actionIndex)
                     }
@@ -360,7 +361,7 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    private inner class PlaybackSessionCallback : MediaSession.Callback {
+    private inner class AutoLibraryCallback : MediaLibrarySession.Callback {
 
         override fun onConnect(
             session: MediaSession,
@@ -372,7 +373,6 @@ class PlaybackService : MediaSessionService() {
                 .add(SessionCommand(CMD_SKIP_FORWARD, Bundle.EMPTY))
                 .build()
 
-            // Remove previous/next track buttons
             val playerCommands = MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
                 .remove(Player.COMMAND_SEEK_TO_PREVIOUS)
                 .remove(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
@@ -410,6 +410,90 @@ class PlaybackService : MediaSessionService() {
                 }
             }
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
+        }
+
+        override fun onGetLibraryRoot(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            params: MediaLibraryService.LibraryParams?,
+        ): ListenableFuture<LibraryResult<MediaItem>> {
+            val root = MediaItem.Builder()
+                .setMediaId("ROOT")
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setIsBrowsable(true)
+                        .setIsPlayable(false)
+                        .setTitle("MusiCast")
+                        .build()
+                )
+                .build()
+            return Futures.immediateFuture(LibraryResult.ofItem(root, null))
+        }
+
+        override fun onGetChildren(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            parentId: String,
+            page: Int,
+            pageSize: Int,
+            params: MediaLibraryService.LibraryParams?,
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+            if (parentId != "ROOT") {
+                return Futures.immediateFuture(
+                    LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
+                )
+            }
+            val items = cachedEpisodes.map { (episode, podcast) ->
+                MediaItem.Builder()
+                    .setMediaId(episode.id.toString())
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(episode.title)
+                            .setArtist(podcast.title)
+                            .setIsBrowsable(false)
+                            .setIsPlayable(true)
+                            .setArtworkUri(podcast.artworkUrl?.let { Uri.parse(it) })
+                            .setDurationMs(episode.durationMs ?: 0L)
+                            .build()
+                    )
+                    .build()
+            }
+            return Futures.immediateFuture(
+                LibraryResult.ofItemList(ImmutableList.copyOf(items), null)
+            )
+        }
+
+        override fun onAddMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: List<MediaItem>,
+        ): ListenableFuture<List<MediaItem>> {
+            val resolved = mediaItems.map { item ->
+                val id = item.mediaId.toLongOrNull()
+                val entry = cachedEpisodes.find { it.episode.id == id }
+                if (entry != null) {
+                    serviceScope.launch {
+                        playbackManager.setActiveEpisodeFromExternal(
+                            entry.episode,
+                            entry.podcast.title,
+                            entry.podcast.artworkUrl,
+                        )
+                    }
+                    item.buildUpon()
+                        .setUri(Uri.fromFile(File(entry.episode.downloadPath!!)))
+                        .setMediaMetadata(
+                            MediaMetadata.Builder()
+                                .setTitle(entry.episode.title)
+                                .setArtist(entry.podcast.title)
+                                .setArtworkUri(entry.podcast.artworkUrl?.let { Uri.parse(it) })
+                                .build()
+                        )
+                        .build()
+                } else {
+                    item
+                }
+            }
+            return Futures.immediateFuture(resolved)
         }
 
         private fun getNextSpeed(current: Float): Float {
