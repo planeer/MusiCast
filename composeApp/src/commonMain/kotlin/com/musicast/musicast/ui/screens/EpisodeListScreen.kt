@@ -24,10 +24,15 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -50,6 +55,15 @@ fun EpisodeListScreen(
     onNavigateToPlayer: () -> Unit,
 ) {
     val state by viewModel.state.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(state.error) {
+        val error = state.error
+        if (error != null) {
+            snackbarHostState.showSnackbar(error)
+            viewModel.clearError()
+        }
+    }
 
     Scaffold(
         // Outer Scaffold in App.kt already consumed the system-bar insets.
@@ -78,33 +92,40 @@ fun EpisodeListScreen(
                 },
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
-        if (state.episodes.isEmpty()) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxSize().padding(padding),
-            ) {
-                Text(
-                    text = "No episodes found",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        } else {
-            LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
-                items(state.episodes, key = { it.id }) { episode ->
-                    EpisodeItem(
-                        episode = episode,
-                        downloadProgress = state.downloads[episode.id],
-                        analysisProgress = state.analysisProgress[episode.id],
-                        onPlay = {
-                            viewModel.playEpisode(episode)
-                            onNavigateToPlayer()
-                        },
-                        onDownload = { viewModel.downloadEpisode(episode) },
-                        onDeleteDownload = { viewModel.deleteDownload(episode) },
+        PullToRefreshBox(
+            isRefreshing = state.isRefreshing,
+            onRefresh = viewModel::refreshFeed,
+            modifier = Modifier.fillMaxSize().padding(padding),
+        ) {
+            if (state.episodes.isEmpty()) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    Text(
+                        text = "No episodes found",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    HorizontalDivider()
+                }
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(state.episodes, key = { it.id }) { episode ->
+                        EpisodeItem(
+                            episode = episode,
+                            downloadProgress = state.downloads[episode.id],
+                            analysisProgress = state.analysisProgress[episode.id],
+                            onPlay = {
+                                viewModel.playEpisode(episode)
+                                onNavigateToPlayer()
+                            },
+                            onDownload = { viewModel.downloadEpisode(episode) },
+                            onDeleteDownload = { viewModel.deleteDownload(episode) },
+                        )
+                        HorizontalDivider()
+                    }
                 }
             }
         }

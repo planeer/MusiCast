@@ -44,7 +44,7 @@ import com.musicast.musicast.ui.viewmodel.PodcastListViewModel
 @Composable
 fun PodcastListScreen(
     viewModel: PodcastListViewModel,
-    onPodcastClick: (podcastId: Long, podcastTitle: String, artworkUrl: String?) -> Unit,
+    onPodcastClick: (podcastId: Long, podcastTitle: String, artworkUrl: String?, feedUrl: String) -> Unit,
 ) {
     val state by viewModel.state.collectAsState()
 
@@ -102,7 +102,7 @@ fun PodcastListScreen(
                 items(state.podcasts, key = { it.id }) { podcast ->
                     PodcastItem(
                         podcast = podcast,
-                        onClick = { onPodcastClick(podcast.id, podcast.title, podcast.artworkUrl) },
+                        onClick = { onPodcastClick(podcast.id, podcast.title, podcast.artworkUrl, podcast.feedUrl) },
                         onLongClick = { podcastToDelete = podcast },
                     )
                 }

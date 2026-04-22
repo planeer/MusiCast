@@ -22,10 +22,12 @@ data class EpisodeListState(
     val downloads: Map<Long, DownloadProgress> = emptyMap(),
     val analysisProgress: Map<Long, Float> = emptyMap(),
     val isRefreshing: Boolean = false,
+    val error: String? = null,
 )
 
 class EpisodeListViewModel(
     private val podcastId: Long,
+    private val feedUrl: String = "",
     private val podcastTitle: String = "",
     private val artworkUrl: String? = null,
     private val repository: PodcastRepository,
@@ -89,12 +91,17 @@ class EpisodeListViewModel(
         }
     }
 
-    fun refreshFeed(feedUrl: String) {
+    fun refreshFeed() {
         viewModelScope.launch {
-            _state.update { it.copy(isRefreshing = true) }
+            _state.update { it.copy(isRefreshing = true, error = null) }
             repository.refreshPodcast(podcastId, feedUrl)
+                .onFailure { _state.update { it.copy(error = "Failed to refresh feed") } }
             _state.update { it.copy(isRefreshing = false) }
         }
+    }
+
+    fun clearError() {
+        _state.update { it.copy(error = null) }
     }
 
     fun deleteDownload(episode: Episode) {

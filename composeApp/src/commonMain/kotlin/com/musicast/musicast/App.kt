@@ -80,8 +80,8 @@ fun App() {
                             val viewModel = remember { PodcastListViewModel(repository) }
                             PodcastListScreen(
                                 viewModel = viewModel,
-                                onPodcastClick = { id, title, artworkUrl ->
-                                    navigateTo(Screen.EpisodeList(id, title, artworkUrl))
+                                onPodcastClick = { id, title, artworkUrl, feedUrl ->
+                                    navigateTo(Screen.EpisodeList(id, title, artworkUrl, feedUrl))
                                 },
                             )
                         }
@@ -90,6 +90,7 @@ fun App() {
                             val viewModel = remember(screen.podcastId) {
                                 EpisodeListViewModel(
                                     podcastId = screen.podcastId,
+                                    feedUrl = screen.feedUrl,
                                     podcastTitle = screen.podcastTitle,
                                     artworkUrl = screen.artworkUrl,
                                     repository = repository,
