@@ -82,12 +82,14 @@ fun EpisodeListScreen(
     }
 
     fun removeDownload(episode: Episode) {
+        // One undo at a time, so the visible Undo always belongs to the latest removal
+        snackbarHostState.currentSnackbarData?.dismiss()
         viewModel.removeDownload(episode)
         scope.launch {
             var undone = false
             try {
                 undone = snackbarHostState.showSnackbar(
-                    message = "Download removed",
+                    message = "Removed \"${episode.title}\"",
                     actionLabel = "Undo",
                     duration = SnackbarDuration.Short,
                 ) == SnackbarResult.ActionPerformed
@@ -175,9 +177,17 @@ fun EpisodeListScreen(
                             analysisProgress = state.analysisProgress[episode.id],
                             onPlay = {
                                 viewModel.playEpisode(episode)
+                                if (episode.id in state.pendingDownloadRemovals) {
+                                    snackbarHostState.currentSnackbarData?.dismiss()
+                                }
                                 onNavigateToPlayer()
                             },
-                            onDownload = { viewModel.downloadEpisode(episode) },
+                            onDownload = {
+                                viewModel.downloadEpisode(episode)
+                                if (episode.id in state.pendingDownloadRemovals) {
+                                    snackbarHostState.currentSnackbarData?.dismiss()
+                                }
+                            },
                             onRemoveDownload = { removeDownload(episode) },
                             onRetryAnalysis = { viewModel.retryAnalysis(episode) },
                         )
@@ -222,7 +232,9 @@ private fun EpisodeItem(
     onRemoveDownload: () -> Unit,
     onRetryAnalysis: () -> Unit,
 ) {
-    val isDownloading = downloadProgress?.status == DownloadStatus.DOWNLOADING
+    // PENDING (still connecting) counts too, so the Download button can't be tapped twice
+    val isDownloading = downloadProgress?.status == DownloadStatus.PENDING ||
+        downloadProgress?.status == DownloadStatus.DOWNLOADING
     val inProgress = episode.playbackPositionMs > 0 && !episode.isPlayed &&
         episode.durationMs != null && episode.durationMs > 0
 
@@ -315,7 +327,7 @@ private fun EpisodeItem(
             }
         }
 
-        if (analysisProgress != null) {
+        if (analysisProgress != null && isDownloaded) {
             Spacer(Modifier.height(8.dp))
             LinearProgressIndicator(
                 progress = { analysisProgress.coerceIn(0f, 1f) },

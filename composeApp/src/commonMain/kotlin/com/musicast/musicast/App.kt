@@ -76,7 +76,7 @@ fun App() {
                 Crossfade(targetState = currentScreen) { screen ->
                     when (screen) {
                         is Screen.PodcastList -> {
-                            val viewModel = remember { PodcastListViewModel(repository) }
+                            val viewModel = remember { PodcastListViewModel(repository, processor) }
                             PodcastListScreen(
                                 viewModel = viewModel,
                                 onPodcastClick = { id, title, artworkUrl, feedUrl ->

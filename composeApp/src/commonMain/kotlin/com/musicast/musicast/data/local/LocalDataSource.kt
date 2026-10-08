@@ -87,6 +87,10 @@ class LocalDataSource(private val db: PodcastDatabase) {
         db.podcastDatabaseQueries.deletePodcast(id)
     }
 
+    fun deleteEpisodesByPodcast(podcastId: Long) {
+        db.podcastDatabaseQueries.deleteEpisodesByPodcast(podcastId)
+    }
+
     fun insertEpisode(
         podcastId: Long,
         guid: String,

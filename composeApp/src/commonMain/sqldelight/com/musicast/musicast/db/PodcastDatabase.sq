@@ -60,6 +60,9 @@ deletePodcast:
 DELETE FROM podcast WHERE id = ?;
 
 -- Episode queries
+deleteEpisodesByPodcast:
+DELETE FROM episode WHERE podcast_id = ?;
+
 selectEpisodesByPodcast:
 SELECT * FROM episode WHERE podcast_id = ? ORDER BY publish_date DESC;
 

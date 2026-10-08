@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -45,11 +46,13 @@ fun SegmentTimeline(
     val musicDim = musicColor.copy(alpha = 0.4f)
     val musicSegments = remember(segments) { segments.filter { it.type == ContentType.MUSIC } }
 
-    var canvasWidth by remember { mutableStateOf(1f) }
     var isDragging by remember { mutableStateOf(false) }
+    // Gesture handlers outlive recompositions; always call the latest callbacks
+    val currentOnSeek by rememberUpdatedState(onSeek)
+    val currentOnSeekFinished by rememberUpdatedState(onSeekFinished)
 
-    fun xToPosition(x: Float): Long {
-        return ((x / canvasWidth) * durationMs).toLong().coerceIn(0L, durationMs)
+    fun xToPosition(x: Float, width: Int): Long {
+        return ((x / width.coerceAtLeast(1)) * durationMs).toLong().coerceIn(0L, durationMs)
     }
 
     Canvas(
@@ -58,8 +61,8 @@ fun SegmentTimeline(
             .height(40.dp)
             .pointerInput(durationMs) {
                 detectTapGestures { offset ->
-                    onSeek(xToPosition(offset.x))
-                    onSeekFinished()
+                    currentOnSeek(xToPosition(offset.x, size.width))
+                    currentOnSeekFinished()
                 }
             }
             .pointerInput(durationMs) {
@@ -67,20 +70,19 @@ fun SegmentTimeline(
                     onDragStart = { isDragging = true },
                     onDragEnd = {
                         isDragging = false
-                        onSeekFinished()
+                        currentOnSeekFinished()
                     },
                     onDragCancel = {
                         isDragging = false
-                        onSeekFinished()
+                        currentOnSeekFinished()
                     },
                     onHorizontalDrag = { change, _ ->
                         change.consume()
-                        onSeek(xToPosition(change.position.x))
+                        currentOnSeek(xToPosition(change.position.x, size.width))
                     },
                 )
             },
     ) {
-        canvasWidth = size.width
         val centerY = size.height / 2f
         val posX = (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) * size.width
 

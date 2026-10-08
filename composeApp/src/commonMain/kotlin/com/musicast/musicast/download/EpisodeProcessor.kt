@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -32,6 +35,7 @@ class EpisodeProcessor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val analysisJobs = mutableMapOf<Long, Job>()
+    private val downloadJobs = mutableMapOf<Long, Job>()
 
     // The YAMNet classifier is a shared singleton that MusicDetector closes after
     // each file, so overlapping analyses would free the interpreter mid-inference.
@@ -43,16 +47,22 @@ class EpisodeProcessor(
     val activeDownloads: StateFlow<Map<Long, DownloadProgress>> get() = downloader.activeDownloads
 
     fun download(episode: Episode) {
-        scope.launch {
-            downloader.download(episode.id, episode.audioUrl).collect { progress ->
-                if (progress.status == DownloadStatus.COMPLETED) {
-                    val localPath = downloader.getLocalPath(episode.id)
-                    if (localPath != null) {
-                        localDataSource.updateDownloadPath(episode.id, localPath)
-                        // Auto-analyze after download
-                        analyze(episode.copy(downloadPath = localPath))
+        // Ignore repeat taps: two downloads would write the same file
+        if (downloadJobs[episode.id]?.isActive == true) return
+        downloadJobs[episode.id] = scope.launch {
+            try {
+                downloader.download(episode.id, episode.audioUrl).collect { progress ->
+                    if (progress.status == DownloadStatus.COMPLETED) {
+                        val localPath = downloader.getLocalPath(episode.id)
+                        if (localPath != null) {
+                            localDataSource.updateDownloadPath(episode.id, localPath)
+                            // Auto-analyze after download
+                            analyze(episode.copy(downloadPath = localPath))
+                        }
                     }
                 }
+            } finally {
+                if (downloadJobs[episode.id] === coroutineContext.job) downloadJobs.remove(episode.id)
             }
         }
     }
@@ -88,9 +98,14 @@ class EpisodeProcessor(
                     }
                 }
             } finally {
-                _analysisProgress.update { it - episode.id }
-                analysisJobs.remove(episode.id)
+                // A newer job may have replaced this one after a cancel; leave its state alone
+                if (analysisJobs[episode.id] === coroutineContext.job) {
+                    analysisJobs.remove(episode.id)
+                    _analysisProgress.update { it - episode.id }
+                }
             }
+            // Cancelled (download removed) — don't overwrite the reset status
+            ensureActive()
 
             if (segments != null) {
                 localDataSource.updateAnalysisStatus(episode.id, AnalysisStatus.COMPLETED)
@@ -106,9 +121,29 @@ class EpisodeProcessor(
 
     fun deleteDownload(episode: Episode) {
         analysisJobs.remove(episode.id)?.cancel()
+        _analysisProgress.update { it - episode.id }
         downloader.deleteDownload(episode.id)
         localDataSource.updateDownloadPath(episode.id, null)
         localDataSource.updateAnalysisStatus(episode.id, AnalysisStatus.NONE)
         localDataSource.clearSegmentsData(episode.id)
+    }
+
+    /** Unfollows a podcast: stops its work, deletes its downloaded files, episodes, and the podcast. */
+    fun deletePodcast(podcastId: Long) {
+        scope.launch {
+            val episodes = localDataSource.getEpisodesByPodcast(podcastId).first()
+            if (playbackManager.state.value.episode?.podcastId == podcastId) {
+                playbackManager.stop()
+            }
+            for (episode in episodes) {
+                downloadJobs.remove(episode.id)?.cancel()
+                analysisJobs.remove(episode.id)?.cancel()
+                _analysisProgress.update { it - episode.id }
+                downloader.deleteDownload(episode.id)
+            }
+            // Foreign keys aren't enabled on the drivers, so ON DELETE CASCADE doesn't fire
+            localDataSource.deleteEpisodesByPodcast(podcastId)
+            localDataSource.deletePodcast(podcastId)
+        }
     }
 }

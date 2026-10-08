@@ -110,6 +110,7 @@ Paths are relative to `composeApp/src/` unless noted otherwise. All Kotlin packa
 
 ## Common Pitfalls
 
+- **No foreign keys at runtime**: neither driver enables `PRAGMA foreign_keys`, so `ON DELETE CASCADE` never fires. Delete child rows explicitly (see `EpisodeProcessor.deletePodcast`).
 - **SQLDelight dialect**: Uses `sqlite_3_18` — no `RETURNING` clause. Use `SELECT last_insert_rowid()` instead.
 - **rss-parser API**: Feed item audio is at `rawEnclosure?.url`, not `enclosures`.
 - **Composable scope**: `koinInject()` must be called at composable scope level, not inside `remember{}`.

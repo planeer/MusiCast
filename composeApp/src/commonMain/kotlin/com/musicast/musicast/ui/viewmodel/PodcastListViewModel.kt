@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.musicast.musicast.data.repository.PodcastRepository
 import com.musicast.musicast.domain.model.Podcast
+import com.musicast.musicast.download.EpisodeProcessor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +22,7 @@ data class PodcastListState(
 
 class PodcastListViewModel(
     private val repository: PodcastRepository,
+    private val processor: EpisodeProcessor,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(PodcastListState())
@@ -68,6 +70,6 @@ class PodcastListViewModel(
     }
 
     fun deletePodcast(podcastId: Long) {
-        repository.deletePodcast(podcastId)
+        processor.deletePodcast(podcastId)
     }
 }

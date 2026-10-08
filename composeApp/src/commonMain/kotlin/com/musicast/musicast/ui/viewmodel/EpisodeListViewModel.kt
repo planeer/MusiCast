@@ -55,11 +55,18 @@ class EpisodeListViewModel(
     }
 
     fun playEpisode(episode: Episode) {
+        // Playing (or re-downloading) an episode whose removal is still undoable cancels the removal
+        undoRemoveDownload(episode)
         playbackManager.playEpisode(episode, podcastTitle, artworkUrl)
         processor.prepareForPlayback(episode)
     }
 
     fun downloadEpisode(episode: Episode) {
+        // The file of a pending removal is still on disk; restoring it is enough
+        if (episode.id in _state.value.pendingDownloadRemovals) {
+            undoRemoveDownload(episode)
+            return
+        }
         processor.download(episode)
     }
 
@@ -83,7 +90,7 @@ class EpisodeListViewModel(
     }
 
     fun deletePodcast() {
-        repository.deletePodcast(podcastId)
+        processor.deletePodcast(podcastId)
     }
 
     fun refreshFeed() {
