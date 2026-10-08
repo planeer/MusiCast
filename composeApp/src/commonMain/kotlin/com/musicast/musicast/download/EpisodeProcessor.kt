@@ -98,9 +98,12 @@ class EpisodeProcessor(
                     }
                 }
             } finally {
-                // A newer job may have replaced this one after a cancel; leave its state alone
-                if (analysisJobs[episode.id] === coroutineContext.job) {
-                    analysisJobs.remove(episode.id)
+                // A newer job may have replaced this one after a cancel; leave its state alone.
+                // Progress is still cleared when no job replaced us: onProgress runs on the
+                // decoder thread and can re-add an entry after deleteDownload removed it.
+                val current = analysisJobs[episode.id]
+                if (current === coroutineContext.job) analysisJobs.remove(episode.id)
+                if (current == null || current === coroutineContext.job) {
                     _analysisProgress.update { it - episode.id }
                 }
             }
