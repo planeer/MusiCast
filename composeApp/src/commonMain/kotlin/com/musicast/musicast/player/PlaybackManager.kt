@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 class PlaybackManager(
     private val audioPlayer: AudioPlayer,
@@ -146,12 +147,12 @@ class PlaybackManager(
     }
 
     fun incrementSpeed() {
-        val newSpeed = ((_state.value.userSpeed * 10).toInt() + 1).toFloat() / 10f
+        val newSpeed = ((_state.value.userSpeed * 10).roundToInt() + 1).toFloat() / 10f
         setUserSpeed(newSpeed)
     }
 
     fun decrementSpeed() {
-        val newSpeed = ((_state.value.userSpeed * 10).toInt() - 1).toFloat() / 10f
+        val newSpeed = ((_state.value.userSpeed * 10).roundToInt() - 1).toFloat() / 10f
         setUserSpeed(newSpeed)
     }
 

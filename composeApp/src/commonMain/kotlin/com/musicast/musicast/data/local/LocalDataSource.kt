@@ -115,6 +115,14 @@ class LocalDataSource(private val db: PodcastDatabase) {
         db.podcastDatabaseQueries.updateAnalysisStatus(analysis_status = status.name, id = episodeId)
     }
 
+    /**
+     * Analysis runs in-process, so anything still IN_PROGRESS at startup was
+     * interrupted (app killed). Reset it so playback re-triggers analysis.
+     */
+    fun resetInterruptedAnalyses() {
+        db.podcastDatabaseQueries.resetInterruptedAnalyses()
+    }
+
     fun updatePlaybackPosition(episodeId: Long, positionMs: Long) {
         db.podcastDatabaseQueries.updatePlaybackPosition(playback_position_ms = positionMs, id = episodeId)
     }

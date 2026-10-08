@@ -1,6 +1,6 @@
 package com.musicast.musicast.ui.screens
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,12 +12,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -25,6 +28,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -33,16 +37,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
-import com.musicast.musicast.ui.components.PlayPauseIcon
+import com.musicast.musicast.domain.model.AnalysisStatus
+import com.musicast.musicast.domain.model.ContentType
+import com.musicast.musicast.domain.model.PlaybackState
+import com.musicast.musicast.ui.components.Artwork
+import com.musicast.musicast.ui.components.SegmentTimeline
+import com.musicast.musicast.ui.components.SkipButton
 import com.musicast.musicast.ui.components.SpeedControl
-import com.musicast.musicast.ui.components.WaveformSeekBar
+import com.musicast.musicast.ui.theme.AppIcons
+import com.musicast.musicast.ui.theme.music
+import com.musicast.musicast.ui.theme.musicContainer
+import com.musicast.musicast.ui.theme.onMusicContainer
 import com.musicast.musicast.ui.viewmodel.PlayerViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -52,6 +60,7 @@ fun PlayerScreen(
     onBack: () -> Unit,
 ) {
     val state by viewModel.state.collectAsState()
+    val analysisProgress by viewModel.analysisProgress.collectAsState()
     val episode = state.episode
 
     if (episode == null) {
@@ -73,14 +82,19 @@ fun PlayerScreen(
                 // inset; TopAppBar defaults to also adding it, which would
                 // double the top gap.
                 windowInsets = WindowInsets(0, 0, 0, 0),
-                title = {},
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
+                title = {
+                    Text(
+                        text = "Now playing",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Text(
-                            "<",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
+                        Icon(AppIcons.ArrowBack, contentDescription = "Back")
                     }
                 },
             )
@@ -94,43 +108,25 @@ fun PlayerScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp),
     ) {
+        Spacer(Modifier.height(8.dp))
 
-        // Artwork
-        if (state.artworkUrl != null) {
-            AsyncImage(
-                model = state.artworkUrl,
-                contentDescription = episode.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(280.dp)
-                    .clip(RoundedCornerShape(16.dp)),
-            )
-        } else {
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                tonalElevation = 4.dp,
-                modifier = Modifier.size(280.dp),
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = episode.title.take(2).uppercase(),
-                        style = MaterialTheme.typography.displayMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-        }
+        Artwork(
+            url = state.artworkUrl,
+            fallbackText = state.podcastTitle.ifEmpty { episode.title },
+            cornerRadius = 20,
+            modifier = Modifier.size(280.dp),
+        )
 
         Spacer(Modifier.height(24.dp))
 
-        // Episode title
+        // Episode title scrolls instead of being cut off
         Text(
             text = episode.title,
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
+            modifier = Modifier.fillMaxWidth().basicMarquee(),
         )
 
         // Podcast name
@@ -141,17 +137,18 @@ fun PlayerScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
+                maxLines = 1,
             )
         }
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(20.dp))
 
-        // Waveform seek bar
+        // Seek bar with music sections marked
         var isSeeking by remember { mutableStateOf(false) }
         var seekPosition by remember { mutableStateOf(0L) }
 
         if (state.durationMs > 0) {
-            WaveformSeekBar(
+            SegmentTimeline(
                 segments = state.segments,
                 durationMs = state.durationMs,
                 positionMs = if (isSeeking) seekPosition else state.positionMs,
@@ -166,94 +163,78 @@ fun PlayerScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Spacer(Modifier.height(4.dp))
-
             // Time labels
             Row(
                 horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
                     text = formatTime(if (isSeeking) seekPosition else state.positionMs),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (state.isMusicDetected) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            AppIcons.MusicNote,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.music,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Text(
+                            text = "Music",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.music,
+                        )
+                    }
+                }
                 Text(
-                    text = formatTime(state.durationMs),
-                    style = MaterialTheme.typography.labelSmall,
+                    text = "-" + formatTime((state.durationMs - state.positionMs).coerceAtLeast(0L)),
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(20.dp))
 
         // Transport controls
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
+            horizontalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterHorizontally),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            // Skip backward 15s
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurfaceVariant),
-                modifier = Modifier.size(48.dp),
+            SkipButton(
+                icon = AppIcons.Replay,
+                seconds = 15,
+                contentDescription = "Skip back 15 seconds",
+                onClick = viewModel::skipBackward,
+                modifier = Modifier.size(56.dp),
+            )
+
+            FilledIconButton(
+                onClick = viewModel::togglePlayPause,
+                modifier = Modifier.size(80.dp),
             ) {
-                IconButton(
-                    onClick = { viewModel.skipBackward() },
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    Text(
-                        text = "15",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
+                Icon(
+                    if (state.isPlaying) AppIcons.Pause else AppIcons.PlayArrow,
+                    contentDescription = if (state.isPlaying) "Pause" else "Play",
+                    modifier = Modifier.size(40.dp),
+                )
             }
 
-            // Play/Pause
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(72.dp),
-            ) {
-                IconButton(
-                    onClick = { viewModel.togglePlayPause() },
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    PlayPauseIcon(
-                        isPlaying = state.isPlaying,
-                        size = 32.dp,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                    )
-                }
-            }
-
-            // Skip forward 30s
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurfaceVariant),
-                modifier = Modifier.size(48.dp),
-            ) {
-                IconButton(
-                    onClick = { viewModel.skipForward() },
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    Text(
-                        text = "30",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
+            SkipButton(
+                icon = AppIcons.Forward,
+                seconds = 30,
+                contentDescription = "Skip forward 30 seconds",
+                onClick = viewModel::skipForward,
+                modifier = Modifier.size(56.dp),
+            )
         }
 
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(28.dp))
 
-        // Speed control with slider
         SpeedControl(
             currentSpeed = state.currentSpeed,
             userSpeed = state.userSpeed,
@@ -264,41 +245,77 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(16.dp))
 
-        // Music detection toggle
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            tonalElevation = 1.dp,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Smart Speed: Music Detection",
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Text(
-                        text = "Auto-slow to 1x during songs",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(
-                    checked = state.musicDetectionEnabled,
-                    onCheckedChange = { viewModel.toggleMusicDetection() },
-                    colors = SwitchDefaults.colors(
-                        checkedTrackColor = MaterialTheme.colorScheme.tertiary,
-                    ),
-                )
-            }
-        }
+        SmartSpeedCard(
+            state = state,
+            analysisProgress = analysisProgress[episode.id],
+            onToggle = viewModel::toggleMusicDetection,
+        )
 
         Spacer(Modifier.height(24.dp))
     }
+    }
+}
+
+@Composable
+private fun SmartSpeedCard(
+    state: PlaybackState,
+    analysisProgress: Float?,
+    onToggle: () -> Unit,
+) {
+    val episode = state.episode ?: return
+    val musicSections = state.segments.count { it.type == ContentType.MUSIC }
+    val status = when {
+        !state.musicDetectionEnabled -> "Off · everything plays at your speed"
+        state.segments.isNotEmpty() && musicSections == 0 -> "No music found in this episode"
+        state.segments.isNotEmpty() -> "Plays $musicSections music sections at 1x"
+        analysisProgress != null -> "Analyzing episode… ${(analysisProgress * 100).toInt()}%"
+        episode.downloadPath == null -> "Download this episode to detect music"
+        episode.analysisStatus == AnalysisStatus.FAILED -> "Music analysis failed for this episode"
+        else -> "Waiting for music analysis"
+    }
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.musicContainer,
+                contentColor = MaterialTheme.colorScheme.onMusicContainer,
+                modifier = Modifier.size(40.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(AppIcons.MusicNote, contentDescription = null, modifier = Modifier.size(20.dp))
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Smart Speed",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    text = status,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = state.musicDetectionEnabled,
+                onCheckedChange = { onToggle() },
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.music,
+                    checkedThumbColor = MaterialTheme.colorScheme.musicContainer,
+                ),
+            )
+        }
     }
 }
 

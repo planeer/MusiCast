@@ -13,7 +13,7 @@ A Kotlin Multiplatform podcast player for Android and iOS with **automatic music
 - **Add podcasts via RSS feed URL** — paste any podcast RSS feed to subscribe
 - **Variable playback speed** — 0.5x to 3.0x in 0.1x increments, with quick presets (1x, 1.2x, 1.5x, 2x)
 - **Automatic music detection** — pre-analyzes episodes to build a speech/music timeline, then auto-adjusts speed during playback
-- **Visual segment map** — see music sections highlighted on the seek bar
+- **Visual segment map** — the seek bar is a timeline of the episode with music sections highlighted
 - **Episode downloads** — download episodes for offline listening
 - **Playback position persistence** — resume where you left off
 - **System media integration** — lock screen controls, notification player with custom buttons (speed toggle, skip -15s/+30s), audio focus management, and Samsung Now Bar / Dynamic Island support

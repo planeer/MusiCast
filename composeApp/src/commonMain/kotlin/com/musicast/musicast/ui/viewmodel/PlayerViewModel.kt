@@ -2,14 +2,17 @@ package com.musicast.musicast.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import com.musicast.musicast.domain.model.PlaybackState
+import com.musicast.musicast.download.EpisodeProcessor
 import com.musicast.musicast.player.PlaybackManager
 import kotlinx.coroutines.flow.StateFlow
 
 class PlayerViewModel(
     private val playbackManager: PlaybackManager,
+    processor: EpisodeProcessor,
 ) : ViewModel() {
 
     val state: StateFlow<PlaybackState> = playbackManager.state
+    val analysisProgress: StateFlow<Map<Long, Float>> = processor.analysisProgress
 
     fun togglePlayPause() {
         if (state.value.isPlaying) {

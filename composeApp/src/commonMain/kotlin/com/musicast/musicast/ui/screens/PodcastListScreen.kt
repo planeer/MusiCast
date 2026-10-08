@@ -17,7 +17,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -31,14 +32,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import com.musicast.musicast.domain.model.Podcast
 import com.musicast.musicast.ui.components.AddPodcastDialog
+import com.musicast.musicast.ui.components.Artwork
+import com.musicast.musicast.ui.theme.AppIcons
 import com.musicast.musicast.ui.viewmodel.PodcastListViewModel
 
 @Composable
@@ -54,9 +54,11 @@ fun PodcastListScreen(
         // to zero prevents this inner Scaffold from double-padding.
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
-            FloatingActionButton(onClick = { viewModel.showAddDialog() }) {
-                Text("+", style = MaterialTheme.typography.headlineSmall)
-            }
+            ExtendedFloatingActionButton(
+                onClick = { viewModel.showAddDialog() },
+                icon = { Icon(AppIcons.Add, contentDescription = null) },
+                text = { Text("Add podcast") },
+            )
         },
     ) { padding ->
         var podcastToDelete by remember { mutableStateOf<Podcast?>(null) }
@@ -67,13 +69,19 @@ fun PodcastListScreen(
                 modifier = Modifier.fillMaxSize().padding(padding),
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        AppIcons.MusicNote,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(56.dp),
+                    )
+                    Spacer(Modifier.height(16.dp))
                     Text(
                         text = "No podcasts yet",
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        text = "Tap + to add a podcast feed",
+                        text = "Add a podcast feed to get started",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -85,19 +93,11 @@ fun PodcastListScreen(
             ) {
                 item {
                     Text(
-                        text = "Podcast Library",
+                        text = "Library",
                         style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp),
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 12.dp),
                     )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "Followed Shows",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    )
-                    Spacer(Modifier.height(16.dp))
                 }
                 items(state.podcasts, key = { it.id }) { podcast ->
                     PodcastItem(
@@ -152,8 +152,8 @@ private fun PodcastItem(
     onLongClick: () -> Unit,
 ) {
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        tonalElevation = 2.dp,
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp)
@@ -163,31 +163,11 @@ private fun PodcastItem(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(12.dp),
         ) {
-            // Artwork
-            if (podcast.artworkUrl != null) {
-                AsyncImage(
-                    model = podcast.artworkUrl,
-                    contentDescription = podcast.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(80.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                )
-            } else {
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    tonalElevation = 4.dp,
-                    modifier = Modifier.size(80.dp),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = podcast.title.take(2).uppercase(),
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-            }
+            Artwork(
+                url = podcast.artworkUrl,
+                fallbackText = podcast.title,
+                modifier = Modifier.size(80.dp),
+            )
 
             Spacer(Modifier.width(12.dp))
 
