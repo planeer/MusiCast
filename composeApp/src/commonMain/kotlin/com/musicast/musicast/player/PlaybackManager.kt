@@ -73,6 +73,8 @@ class PlaybackManager(
                 episode = episode,
                 positionMs = episode.playbackPositionMs,
                 isMusicDetected = false,
+                // A 1x music override from the previous episode must not carry over
+                currentSpeed = it.userSpeed,
                 segments = emptyList(),
                 podcastTitle = podcastTitle,
                 artworkUrl = artworkUrl,
@@ -112,6 +114,7 @@ class PlaybackManager(
                 durationMs = 0L,
                 isPlaying = false,
                 isMusicDetected = false,
+                currentSpeed = it.userSpeed,
             )
         }
     }
@@ -176,6 +179,8 @@ class PlaybackManager(
                 episode = episode,
                 positionMs = episode.playbackPositionMs,
                 isMusicDetected = false,
+                // A 1x music override from the previous episode must not carry over
+                currentSpeed = it.userSpeed,
                 segments = emptyList(),
                 podcastTitle = podcastTitle,
                 artworkUrl = artworkUrl,
