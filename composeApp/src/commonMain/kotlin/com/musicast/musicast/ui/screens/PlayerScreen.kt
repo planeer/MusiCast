@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.musicast.musicast.domain.model.AnalysisStatus
 import com.musicast.musicast.domain.model.ContentType
+import com.musicast.musicast.domain.model.Episode
 import com.musicast.musicast.domain.model.PlaybackState
 import com.musicast.musicast.ui.components.Artwork
 import com.musicast.musicast.ui.components.SegmentTimeline
@@ -61,6 +62,7 @@ fun PlayerScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val analysisProgress by viewModel.analysisProgress.collectAsState()
+    val storedEpisode by viewModel.storedEpisode.collectAsState()
     val episode = state.episode
 
     if (episode == null) {
@@ -249,6 +251,8 @@ fun PlayerScreen(
 
         SmartSpeedCard(
             state = state,
+            // Fall back to the playback snapshot until the stored row for this episode loads
+            storedEpisode = storedEpisode?.takeIf { it.id == episode.id } ?: episode,
             analysisProgress = analysisProgress[episode.id],
             onToggle = viewModel::toggleMusicDetection,
         )
@@ -261,18 +265,18 @@ fun PlayerScreen(
 @Composable
 private fun SmartSpeedCard(
     state: PlaybackState,
+    storedEpisode: Episode,
     analysisProgress: Float?,
     onToggle: () -> Unit,
 ) {
-    val episode = state.episode ?: return
     val musicSections = state.segments.count { it.type == ContentType.MUSIC }
     val status = when {
         !state.musicDetectionEnabled -> "Off · everything plays at your speed"
         state.segments.isNotEmpty() && musicSections == 0 -> "No music found in this episode"
         state.segments.isNotEmpty() -> "Plays $musicSections music sections at 1x"
         analysisProgress != null -> "Analyzing episode… ${(analysisProgress * 100).toInt()}%"
-        episode.downloadPath == null -> "Download this episode to detect music"
-        episode.analysisStatus == AnalysisStatus.FAILED -> "Music analysis failed for this episode"
+        storedEpisode.downloadPath == null -> "Download this episode to detect music"
+        storedEpisode.analysisStatus == AnalysisStatus.FAILED -> "Music analysis failed for this episode"
         else -> "Waiting for music analysis"
     }
 

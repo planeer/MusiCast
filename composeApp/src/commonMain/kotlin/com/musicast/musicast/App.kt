@@ -106,7 +106,7 @@ fun App() {
                         }
 
                         is Screen.Player -> {
-                            val viewModel = remember { PlayerViewModel(playbackManager, processor) }
+                            val viewModel = remember { PlayerViewModel(playbackManager, processor, repository) }
                             PlayerScreen(
                                 viewModel = viewModel,
                                 onBack = { goBack() },
