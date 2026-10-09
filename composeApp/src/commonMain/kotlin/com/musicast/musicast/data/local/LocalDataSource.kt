@@ -87,8 +87,12 @@ class LocalDataSource(private val db: PodcastDatabase) {
         db.podcastDatabaseQueries.deletePodcast(id)
     }
 
-    fun deleteEpisodesByPodcast(podcastId: Long) {
-        db.podcastDatabaseQueries.deleteEpisodesByPodcast(podcastId)
+    /** Deletes a podcast and its episodes atomically (FK cascade isn't enabled). */
+    fun deletePodcastWithEpisodes(podcastId: Long) {
+        db.podcastDatabaseQueries.transaction {
+            db.podcastDatabaseQueries.deleteEpisodesByPodcast(podcastId)
+            db.podcastDatabaseQueries.deletePodcast(podcastId)
+        }
     }
 
     fun insertEpisode(

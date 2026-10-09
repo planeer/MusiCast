@@ -192,7 +192,7 @@ fun PlayerScreen(
                     }
                 }
                 Text(
-                    text = "-" + formatTime((state.durationMs - state.positionMs).coerceAtLeast(0L)),
+                    text = "-" + formatTime((state.durationMs - (if (isSeeking) seekPosition else state.positionMs)).coerceAtLeast(0L)),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

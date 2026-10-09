@@ -145,8 +145,7 @@ class EpisodeProcessor(
                 downloader.deleteDownload(episode.id)
             }
             // Foreign keys aren't enabled on the drivers, so ON DELETE CASCADE doesn't fire
-            localDataSource.deleteEpisodesByPodcast(podcastId)
-            localDataSource.deletePodcast(podcastId)
+            localDataSource.deletePodcastWithEpisodes(podcastId)
         }
     }
 }
