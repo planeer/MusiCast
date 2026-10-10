@@ -39,6 +39,7 @@ import com.musicast.musicast.domain.model.EpisodeWithPodcast
 import com.musicast.musicast.player.AndroidAudioPlayer
 import com.musicast.musicast.player.AudioPlayer
 import com.musicast.musicast.player.PlaybackManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -196,13 +197,15 @@ class PlaybackService : MediaLibraryService() {
         val job = serviceScope.launch {
             try {
                 future.set(transform(localDataSource.getDownloadedEpisodesWithPodcast().first()))
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Throwable) {
                 future.setException(e)
             }
         }
-        // If the scope is cancelled before the body runs, don't leave the future pending
+        // Covers cancellation both before the body starts and while suspended in first()
         job.invokeOnCompletion { cause ->
-            if (cause != null) future.cancel(false)
+            if (cause is CancellationException) future.cancel(false)
         }
         return future
     }
