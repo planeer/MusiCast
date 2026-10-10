@@ -32,17 +32,20 @@ import androidx.media3.session.SessionResult
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.SettableFuture
 import com.musicast.musicast.data.local.LocalDataSource
 import com.musicast.musicast.download.EpisodeProcessor
 import com.musicast.musicast.domain.model.EpisodeWithPodcast
 import com.musicast.musicast.player.AndroidAudioPlayer
 import com.musicast.musicast.player.AudioPlayer
 import com.musicast.musicast.player.PlaybackManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
@@ -57,8 +60,6 @@ class PlaybackService : MediaLibraryService() {
     private val playbackManager: PlaybackManager by inject()
     private val localDataSource: LocalDataSource by inject()
     private val processor: EpisodeProcessor by inject()
-
-    private var cachedEpisodes: List<EpisodeWithPodcast> = emptyList()
 
     companion object {
         const val CMD_TOGGLE_SPEED = "TOGGLE_SPEED"
@@ -183,12 +184,30 @@ class PlaybackService : MediaLibraryService() {
                     }
                 }
         }
+    }
 
-        serviceScope.launch {
-            localDataSource.getDownloadedEpisodesWithPodcast().collect { list ->
-                cachedEpisodes = list
+    /**
+     * Queries the DB directly instead of reading a cached list: Android Auto binds the
+     * service and browses immediately, before any background collector would have emitted.
+     */
+    private fun <T> loadDownloadedEpisodes(
+        transform: (List<EpisodeWithPodcast>) -> T,
+    ): ListenableFuture<T> {
+        val future = SettableFuture.create<T>()
+        val job = serviceScope.launch {
+            try {
+                future.set(transform(localDataSource.getDownloadedEpisodesWithPodcast().first()))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                future.setException(e)
             }
         }
+        // Covers cancellation both before the body starts and while suspended in first()
+        job.invokeOnCompletion { cause ->
+            if (cause is CancellationException) future.cancel(false)
+        }
+        return future
     }
 
     @OptIn(UnstableApi::class)
@@ -445,24 +464,26 @@ class PlaybackService : MediaLibraryService() {
                     LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
                 )
             }
-            val items = cachedEpisodes.map { (episode, podcast) ->
-                MediaItem.Builder()
-                    .setMediaId(episode.id.toString())
-                    .setMediaMetadata(
-                        MediaMetadata.Builder()
-                            .setTitle(episode.title)
-                            .setArtist(podcast.title)
-                            .setIsBrowsable(false)
-                            .setIsPlayable(true)
-                            .setArtworkUri(podcast.artworkUrl?.let { Uri.parse(it) })
-                            .setDurationMs(episode.durationMs ?: 0L)
-                            .build()
-                    )
-                    .build()
-            }
-            return Futures.immediateFuture(
+            return loadDownloadedEpisodes { episodes ->
+                // Long math: Media3 passes pageSize = Int.MAX_VALUE when the browser doesn't page
+                val offset = (page.toLong() * pageSize).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                val items = episodes.drop(offset).take(pageSize).map { (episode, podcast) ->
+                    MediaItem.Builder()
+                        .setMediaId(episode.id.toString())
+                        .setMediaMetadata(
+                            MediaMetadata.Builder()
+                                .setTitle(episode.title)
+                                .setArtist(podcast.title)
+                                .setIsBrowsable(false)
+                                .setIsPlayable(true)
+                                .setArtworkUri(podcast.artworkUrl?.let { Uri.parse(it) })
+                                .setDurationMs(episode.durationMs ?: 0L)
+                                .build()
+                        )
+                        .build()
+                }
                 LibraryResult.ofItemList(ImmutableList.copyOf(items), null)
-            )
+            }
         }
 
         override fun onAddMediaItems(
@@ -470,34 +491,35 @@ class PlaybackService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo,
             mediaItems: List<MediaItem>,
         ): ListenableFuture<List<MediaItem>> {
-            val resolved = mediaItems.map { item ->
-                val id = item.mediaId.toLongOrNull()
-                val entry = cachedEpisodes.find { it.episode.id == id }
-                if (entry != null) {
-                    serviceScope.launch {
-                        playbackManager.setActiveEpisodeFromExternal(
-                            entry.episode,
-                            entry.podcast.title,
-                            entry.podcast.artworkUrl,
-                        )
-                        // Load music segments (or analyze) so Smart Speed works from Android Auto too
-                        processor.prepareForPlayback(entry.episode)
+            return loadDownloadedEpisodes { episodes ->
+                mediaItems.map { item ->
+                    val id = item.mediaId.toLongOrNull()
+                    val entry = episodes.find { it.episode.id == id }
+                    if (entry != null) {
+                        serviceScope.launch {
+                            playbackManager.setActiveEpisodeFromExternal(
+                                entry.episode,
+                                entry.podcast.title,
+                                entry.podcast.artworkUrl,
+                            )
+                            // Load music segments (or analyze) so Smart Speed works from Android Auto too
+                            processor.prepareForPlayback(entry.episode)
+                        }
+                        item.buildUpon()
+                            .setUri(Uri.fromFile(File(entry.episode.downloadPath!!)))
+                            .setMediaMetadata(
+                                MediaMetadata.Builder()
+                                    .setTitle(entry.episode.title)
+                                    .setArtist(entry.podcast.title)
+                                    .setArtworkUri(entry.podcast.artworkUrl?.let { Uri.parse(it) })
+                                    .build()
+                            )
+                            .build()
+                    } else {
+                        item
                     }
-                    item.buildUpon()
-                        .setUri(Uri.fromFile(File(entry.episode.downloadPath!!)))
-                        .setMediaMetadata(
-                            MediaMetadata.Builder()
-                                .setTitle(entry.episode.title)
-                                .setArtist(entry.podcast.title)
-                                .setArtworkUri(entry.podcast.artworkUrl?.let { Uri.parse(it) })
-                                .build()
-                        )
-                        .build()
-                } else {
-                    item
                 }
             }
-            return Futures.immediateFuture(resolved)
         }
 
         private fun getNextSpeed(current: Float): Float {
