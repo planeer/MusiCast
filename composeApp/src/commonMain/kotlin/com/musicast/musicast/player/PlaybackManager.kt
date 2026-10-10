@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 class PlaybackManager(
     private val audioPlayer: AudioPlayer,
@@ -72,6 +73,8 @@ class PlaybackManager(
                 episode = episode,
                 positionMs = episode.playbackPositionMs,
                 isMusicDetected = false,
+                // A 1x music override from the previous episode must not carry over
+                currentSpeed = it.userSpeed,
                 segments = emptyList(),
                 podcastTitle = podcastTitle,
                 artworkUrl = artworkUrl,
@@ -111,6 +114,7 @@ class PlaybackManager(
                 durationMs = 0L,
                 isPlaying = false,
                 isMusicDetected = false,
+                currentSpeed = it.userSpeed,
             )
         }
     }
@@ -146,12 +150,12 @@ class PlaybackManager(
     }
 
     fun incrementSpeed() {
-        val newSpeed = ((_state.value.userSpeed * 10).toInt() + 1).toFloat() / 10f
+        val newSpeed = ((_state.value.userSpeed * 10).roundToInt() + 1).toFloat() / 10f
         setUserSpeed(newSpeed)
     }
 
     fun decrementSpeed() {
-        val newSpeed = ((_state.value.userSpeed * 10).toInt() - 1).toFloat() / 10f
+        val newSpeed = ((_state.value.userSpeed * 10).roundToInt() - 1).toFloat() / 10f
         setUserSpeed(newSpeed)
     }
 
@@ -175,6 +179,8 @@ class PlaybackManager(
                 episode = episode,
                 positionMs = episode.playbackPositionMs,
                 isMusicDetected = false,
+                // A 1x music override from the previous episode must not carry over
+                currentSpeed = it.userSpeed,
                 segments = emptyList(),
                 podcastTitle = podcastTitle,
                 artworkUrl = artworkUrl,

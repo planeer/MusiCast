@@ -4,9 +4,7 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -15,10 +13,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import com.musicast.musicast.audio.MusicDetector
-import com.musicast.musicast.data.local.LocalDataSource
 import com.musicast.musicast.data.repository.PodcastRepository
-import com.musicast.musicast.download.EpisodeDownloader
+import com.musicast.musicast.download.EpisodeProcessor
 import com.musicast.musicast.player.PlaybackManager
 import com.musicast.musicast.ui.components.BackGestureHandler
 import com.musicast.musicast.ui.components.MiniPlayer
@@ -26,6 +22,7 @@ import com.musicast.musicast.ui.navigation.Screen
 import com.musicast.musicast.ui.screens.EpisodeListScreen
 import com.musicast.musicast.ui.screens.PlayerScreen
 import com.musicast.musicast.ui.screens.PodcastListScreen
+import com.musicast.musicast.ui.theme.MusiCastTheme
 import com.musicast.musicast.ui.viewmodel.EpisodeListViewModel
 import com.musicast.musicast.ui.viewmodel.PlayerViewModel
 import com.musicast.musicast.ui.viewmodel.PodcastListViewModel
@@ -33,9 +30,7 @@ import org.koin.compose.koinInject
 
 @Composable
 fun App() {
-    MaterialTheme(
-        colorScheme = darkColorScheme(),
-    ) {
+    MusiCastTheme {
         // Simple back-stack navigation
         val backStack = remember { mutableStateListOf<Screen>(Screen.PodcastList) }
         val currentScreen = backStack.last()
@@ -52,9 +47,7 @@ fun App() {
 
         val playbackManager = koinInject<PlaybackManager>()
         val repository = koinInject<PodcastRepository>()
-        val localDataSource = koinInject<LocalDataSource>()
-        val downloader = koinInject<EpisodeDownloader>()
-        val musicDetector = koinInject<MusicDetector>()
+        val processor = koinInject<EpisodeProcessor>()
         val playbackState by playbackManager.state.collectAsState()
 
         BackGestureHandler(enabled = backStack.size > 1) {
@@ -74,6 +67,7 @@ fun App() {
                                 playbackManager.resume()
                             }
                         },
+                        onSkipForward = { playbackManager.skipForward() },
                     )
                 }
             },
@@ -82,7 +76,7 @@ fun App() {
                 Crossfade(targetState = currentScreen) { screen ->
                     when (screen) {
                         is Screen.PodcastList -> {
-                            val viewModel = remember { PodcastListViewModel(repository) }
+                            val viewModel = remember { PodcastListViewModel(repository, processor) }
                             PodcastListScreen(
                                 viewModel = viewModel,
                                 onPodcastClick = { id, title, artworkUrl, feedUrl ->
@@ -99,10 +93,8 @@ fun App() {
                                     podcastTitle = screen.podcastTitle,
                                     artworkUrl = screen.artworkUrl,
                                     repository = repository,
-                                    localDataSource = localDataSource,
-                                    downloader = downloader,
                                     playbackManager = playbackManager,
-                                    musicDetector = musicDetector,
+                                    processor = processor,
                                 )
                             }
                             EpisodeListScreen(
@@ -114,7 +106,7 @@ fun App() {
                         }
 
                         is Screen.Player -> {
-                            val viewModel = remember { PlayerViewModel(playbackManager) }
+                            val viewModel = remember { PlayerViewModel(playbackManager, processor, repository) }
                             PlayerScreen(
                                 viewModel = viewModel,
                                 onBack = { goBack() },

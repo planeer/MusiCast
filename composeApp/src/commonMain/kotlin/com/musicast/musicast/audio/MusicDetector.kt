@@ -2,6 +2,9 @@ package com.musicast.musicast.audio
 
 import com.musicast.musicast.domain.model.AudioSegment
 import com.musicast.musicast.domain.model.ContentType
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.job
 
 /**
  * Orchestrates the music detection pipeline using YAMNet (TFLite):
@@ -36,7 +39,11 @@ class MusicDetector(
             val windowBuffer = StreamingWindowBuffer()
             var classifyFailures = 0
 
+            // Decoders run a blocking loop, so check for cancellation per chunk
+            // to stop promptly (e.g. when the download is removed mid-analysis).
+            val job = currentCoroutineContext().job
             val success = pcmDecoder.decodeFile(filePath, onProgress) { chunk ->
+                job.ensureActive()
                 windowBuffer.add(chunk) { window ->
                     val scores = yamNetClassifier.classify(window)
                     if (scores != null) {

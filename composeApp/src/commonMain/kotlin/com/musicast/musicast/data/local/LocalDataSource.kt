@@ -87,6 +87,14 @@ class LocalDataSource(private val db: PodcastDatabase) {
         db.podcastDatabaseQueries.deletePodcast(id)
     }
 
+    /** Deletes a podcast and its episodes atomically (FK cascade isn't enabled). */
+    fun deletePodcastWithEpisodes(podcastId: Long) {
+        db.podcastDatabaseQueries.transaction {
+            db.podcastDatabaseQueries.deleteEpisodesByPodcast(podcastId)
+            db.podcastDatabaseQueries.deletePodcast(podcastId)
+        }
+    }
+
     fun insertEpisode(
         podcastId: Long,
         guid: String,
@@ -113,6 +121,14 @@ class LocalDataSource(private val db: PodcastDatabase) {
 
     fun updateAnalysisStatus(episodeId: Long, status: AnalysisStatus) {
         db.podcastDatabaseQueries.updateAnalysisStatus(analysis_status = status.name, id = episodeId)
+    }
+
+    /**
+     * Analysis runs in-process, so anything still IN_PROGRESS at startup was
+     * interrupted (app killed). Reset it so playback re-triggers analysis.
+     */
+    fun resetInterruptedAnalyses() {
+        db.podcastDatabaseQueries.resetInterruptedAnalyses()
     }
 
     fun updatePlaybackPosition(episodeId: Long, positionMs: Long) {

@@ -33,6 +33,7 @@ import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.musicast.musicast.data.local.LocalDataSource
+import com.musicast.musicast.download.EpisodeProcessor
 import com.musicast.musicast.domain.model.EpisodeWithPodcast
 import com.musicast.musicast.player.AndroidAudioPlayer
 import com.musicast.musicast.player.AudioPlayer
@@ -55,6 +56,7 @@ class PlaybackService : MediaLibraryService() {
     private val audioPlayer: AudioPlayer by inject()
     private val playbackManager: PlaybackManager by inject()
     private val localDataSource: LocalDataSource by inject()
+    private val processor: EpisodeProcessor by inject()
 
     private var cachedEpisodes: List<EpisodeWithPodcast> = emptyList()
 
@@ -478,6 +480,8 @@ class PlaybackService : MediaLibraryService() {
                             entry.podcast.title,
                             entry.podcast.artworkUrl,
                         )
+                        // Load music segments (or analyze) so Smart Speed works from Android Auto too
+                        processor.prepareForPlayback(entry.episode)
                     }
                     item.buildUpon()
                         .setUri(Uri.fromFile(File(entry.episode.downloadPath!!)))

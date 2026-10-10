@@ -97,7 +97,10 @@ Paths are relative to `composeApp/src/` unless noted otherwise. All Kotlin packa
 | `commonMain/kotlin/com/musicast/musicast/audio/StreamingWindowBuffer.kt` | Buffers PCM into 0.975s windows for YAMNet |
 | `commonMain/kotlin/com/musicast/musicast/audio/AudioConstants.kt` | Shared constants (sample rate, window size, class count) |
 | `commonMain/kotlin/com/musicast/musicast/player/PlaybackManager.kt` | Speed management, music detection during playback |
-| `commonMain/kotlin/com/musicast/musicast/ui/viewmodel/EpisodeListViewModel.kt` | Download, analysis, and play orchestration |
+| `commonMain/kotlin/com/musicast/musicast/download/EpisodeProcessor.kt` | App-wide download + analysis orchestration (serializes analyses) |
+| `commonMain/kotlin/com/musicast/musicast/ui/viewmodel/EpisodeListViewModel.kt` | Episode list state, play, delete-with-undo |
+| `commonMain/kotlin/com/musicast/musicast/ui/theme/Theme.kt` | Brand light/dark color schemes; `ColorScheme.music` accent |
+| `commonMain/kotlin/com/musicast/musicast/ui/theme/AppIcons.kt` | Hand-built Material icon vectors (no icons artifact dependency) |
 | `commonMain/kotlin/com/musicast/musicast/data/local/LocalDataSource.kt` | All DB operations including segment persistence |
 | `commonMain/sqldelight/com/musicast/musicast/db/PodcastDatabase.sq` | Database schema (SQLDelight) |
 | `commonMain/kotlin/com/musicast/musicast/App.kt` | Main Compose entry point, navigation, Koin injection |
@@ -107,12 +110,15 @@ Paths are relative to `composeApp/src/` unless noted otherwise. All Kotlin packa
 
 ## Common Pitfalls
 
+- **No foreign keys at runtime**: neither driver enables `PRAGMA foreign_keys`, so `ON DELETE CASCADE` never fires. Delete child rows explicitly (see `EpisodeProcessor.deletePodcast`).
 - **SQLDelight dialect**: Uses `sqlite_3_18` — no `RETURNING` clause. Use `SELECT last_insert_rowid()` instead.
 - **rss-parser API**: Feed item audio is at `rawEnclosure?.url`, not `enclosures`.
 - **Composable scope**: `koinInject()` must be called at composable scope level, not inside `remember{}`.
 - **iOS native targets**: Won't compile on Linux/Windows. Build warnings are expected and suppressed via `kotlin.native.ignoreDisabledTargets`.
 - **Lifecycle version**: Currently pinned to `2.10.0` via the template's `libs.versions.toml`. The previous project required `2.8.4` for `lifecycle-viewmodel-compose` — if you hit runtime crashes or ViewModel scoping issues after an upgrade, try reverting to `2.8.4`.
 - **Memory**: Audio analysis uses streaming pipeline — never accumulate full decoded audio in memory.
+- **One analysis at a time**: `YamNetClassifier` is a singleton and `MusicDetector.analyzeFile` closes it when done, so concurrent analyses crash TFLite (SIGSEGV). `EpisodeProcessor` serializes them with a `Mutex` — keep all analysis going through it.
+- **Icons**: Add new icons to `AppIcons` from Material SVG path data rather than adding `material-icons-extended`.
 - **TFLite input resize**: YAMNet's TFLite model has a dynamic input shape. Must call `resizeInput(0, [15600])` + `allocateTensors()` after creating the interpreter.
 - **TFLite multiple outputs**: YAMNet has 3 output tensors (scores, embeddings, spectrogram). Use `runForMultipleInputsOutputs` with ByteBuffer placeholders for unused outputs.
 - **PcmDecoder resampling**: The resampler accumulator can go negative between chunks — guard `idx0 >= 0` before array access.

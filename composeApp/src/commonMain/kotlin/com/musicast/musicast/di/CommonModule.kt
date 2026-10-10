@@ -7,6 +7,7 @@ import com.musicast.musicast.data.local.LocalDataSource
 import com.musicast.musicast.data.remote.RssFeedService
 import com.musicast.musicast.data.repository.PodcastRepository
 import com.musicast.musicast.db.PodcastDatabase
+import com.musicast.musicast.download.EpisodeProcessor
 import com.musicast.musicast.player.PlaybackManager
 import com.prof18.rssparser.RssParser
 import org.koin.core.module.Module
@@ -17,7 +18,7 @@ val commonModule = module {
     single { RssParser() }
     single { RssFeedService(get()) }
     single { PodcastDatabase(get()) }
-    single { LocalDataSource(get()) }
+    single { LocalDataSource(get()).apply { resetInterruptedAnalyses() } }
     single { PodcastRepository(get(), get()) }
 
     // Audio
@@ -26,6 +27,7 @@ val commonModule = module {
 
     // Player
     single { PlaybackManager(get(), get()) }
+    single { EpisodeProcessor(get(), get(), get(), get()) }
 
     // ViewModels are created manually in App.kt via remember{} with injected deps
 }
