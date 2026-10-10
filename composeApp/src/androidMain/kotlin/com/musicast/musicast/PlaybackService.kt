@@ -193,12 +193,16 @@ class PlaybackService : MediaLibraryService() {
         transform: (List<EpisodeWithPodcast>) -> T,
     ): ListenableFuture<T> {
         val future = SettableFuture.create<T>()
-        serviceScope.launch {
+        val job = serviceScope.launch {
             try {
                 future.set(transform(localDataSource.getDownloadedEpisodesWithPodcast().first()))
             } catch (e: Throwable) {
                 future.setException(e)
             }
+        }
+        // If the scope is cancelled before the body runs, don't leave the future pending
+        job.invokeOnCompletion { cause ->
+            if (cause != null) future.cancel(false)
         }
         return future
     }
