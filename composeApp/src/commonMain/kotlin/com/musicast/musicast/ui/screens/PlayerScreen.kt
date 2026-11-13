@@ -276,6 +276,10 @@ private fun SmartSpeedCard(
         state.segments.isNotEmpty() -> "Plays $musicSections music sections at 1x"
         analysisProgress != null -> "Analyzing episode… ${(analysisProgress * 100).toInt()}%"
         storedEpisode.downloadPath == null -> "Download this episode to detect music"
+        // Downloaded and analyzed while streaming: segments only apply to the file
+        state.episode?.downloadPath == null &&
+            storedEpisode.analysisStatus == AnalysisStatus.COMPLETED ->
+            "Downloaded · play it again to detect music"
         storedEpisode.analysisStatus == AnalysisStatus.FAILED -> "Music analysis failed for this episode"
         else -> "Waiting for music analysis"
     }

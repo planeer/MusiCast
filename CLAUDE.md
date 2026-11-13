@@ -95,6 +95,7 @@ Paths are relative to `composeApp/src/` unless noted otherwise. All Kotlin packa
 | `commonMain/kotlin/com/musicast/musicast/audio/MusicDetector.kt` | Orchestrates decode → YAMNet → classify pipeline |
 | `commonMain/kotlin/com/musicast/musicast/audio/SegmentClassifier.kt` | Post-processes YAMNet scores into speech/music segments |
 | `commonMain/kotlin/com/musicast/musicast/audio/StreamingWindowBuffer.kt` | Buffers PCM into 0.975s windows for YAMNet |
+| `commonMain/kotlin/com/musicast/musicast/audio/LinearResampler.kt` | Streaming resampler to 16 kHz, used by both platform decoders |
 | `commonMain/kotlin/com/musicast/musicast/audio/AudioConstants.kt` | Shared constants (sample rate, window size, class count) |
 | `commonMain/kotlin/com/musicast/musicast/player/PlaybackManager.kt` | Speed management, music detection during playback |
 | `commonMain/kotlin/com/musicast/musicast/download/EpisodeProcessor.kt` | App-wide download + analysis orchestration (serializes analyses) |
@@ -122,7 +123,8 @@ Paths are relative to `composeApp/src/` unless noted otherwise. All Kotlin packa
 - **Icons**: Add new icons to `AppIcons` from Material SVG path data rather than adding `material-icons-extended`.
 - **TFLite input resize**: YAMNet's TFLite model has a dynamic input shape. Must call `resizeInput(0, [15600])` + `allocateTensors()` after creating the interpreter.
 - **TFLite multiple outputs**: YAMNet has 3 output tensors (scores, embeddings, spectrogram). Use `runForMultipleInputsOutputs` with ByteBuffer placeholders for unused outputs.
-- **PcmDecoder resampling**: The resampler accumulator can go negative between chunks — guard `idx0 >= 0` before array access.
+- **PcmDecoder resampling**: Both decoders must resample through `LinearResampler`, which keeps the output length exact however the input is chunked. Segment times are derived from the 16 kHz sample count (window index × 975 ms), so any lost or extra samples show up as segments drifting further off as the episode goes on. For the same reason, a window that fails to classify must still take up its slot.
+- **Analysis version**: Bump `MusicDetector.ANALYSIS_VERSION` whenever a pipeline change alters the segments produced for the same audio; stored results from older versions are discarded at startup and re-analyzed on next play.
 - **MediaSession notification ID**: Must use the same notification ID (1001) in both `onStartCommand()` and Media3's `MediaNotificationManager`. Using different IDs causes duplicate notifications (one plain, one media).
 - **Samsung Now Bar**: Requires a true foreground service (`startForeground()`, not just `NotificationManager.notify()`), a `MediaStyle` notification with the session token, and a non-null `PendingIntent` (`setSessionActivity()` on the session + `setContentIntent()` on the notification).
 - **Custom notification buttons**: All custom buttons must use `SessionCommand` (not `playerCommand`) to appear in the notification. The `onConnect` callback must remove default prev/next player commands and add custom session commands. Speed icon uses `IconCompat.createWithBitmap()` but still needs `setIconResId()` on the `CommandButton` for the `PlaybackStateCompat` compat layer (crashes with `IllegalArgumentException` otherwise).

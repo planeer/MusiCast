@@ -1,5 +1,6 @@
 package com.musicast.musicast.audio
 
+import android.media.AudioFormat
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
@@ -75,10 +76,12 @@ actual class PcmDecoder actual constructor() {
         extractor.selectTrack(audioTrackIdx)
 
         val mime = format.getString(MediaFormat.KEY_MIME)!!
-        val sourceSampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-        val channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-        val targetRate = AudioConstants.SAMPLE_RATE
-        val needsResample = sourceSampleRate != targetRate
+        // The container's rate/channel count can differ from what the decoder
+        // actually emits (e.g. HE-AAC with SBR doubles the rate), so these are
+        // refreshed from the codec's output format when it is reported.
+        var sourceSampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+        var channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+        var floatPcm = false
 
         // Get total duration for progress reporting
         val durationUs = if (format.containsKey(MediaFormat.KEY_DURATION)) {
@@ -95,9 +98,7 @@ actual class PcmDecoder actual constructor() {
         var inputDone = false
         var outputDone = false
 
-        // Resampling state
-        val resampleRatio = if (needsResample) sourceSampleRate.toDouble() / targetRate else 1.0
-        var resampleAccumulator = 0.0
+        var resampler = LinearResampler(sourceSampleRate)
         var lastProgressReport = 0f
 
         try {
@@ -124,20 +125,30 @@ actual class PcmDecoder actual constructor() {
 
                 // Drain output
                 val outputIdx = codec.dequeueOutputBuffer(bufferInfo, 10_000L)
-                if (outputIdx >= 0) {
+                if (outputIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    val outFormat = codec.outputFormat
+                    val newRate = outFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                    channels = outFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                    floatPcm = outFormat.containsKey(MediaFormat.KEY_PCM_ENCODING) &&
+                        outFormat.getInteger(MediaFormat.KEY_PCM_ENCODING) ==
+                        AudioFormat.ENCODING_PCM_FLOAT
+                    if (newRate != sourceSampleRate) {
+                        sourceSampleRate = newRate
+                        resampler = LinearResampler(newRate)
+                    }
+                } else if (outputIdx >= 0) {
                     if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
                         outputDone = true
                     }
 
                     if (bufferInfo.size > 0) {
                         val outputBuffer = codec.getOutputBuffer(outputIdx)!!
-                        val chunk = extractAndResample(
-                            outputBuffer, bufferInfo.size, channels,
-                            needsResample, resampleRatio, resampleAccumulator
-                        )
-                        resampleAccumulator = chunk.second
-                        if (chunk.first.isNotEmpty()) {
-                            onChunk(chunk.first)
+                        outputBuffer.position(bufferInfo.offset)
+                        outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
+                        val mono = downmix(outputBuffer, bufferInfo.size, channels, floatPcm)
+                        val chunk = resampler.process(mono)
+                        if (chunk.isNotEmpty()) {
+                            onChunk(chunk)
                         }
 
                         // Report progress based on presentation time
@@ -163,57 +174,23 @@ actual class PcmDecoder actual constructor() {
         }
     }
 
-    private fun extractAndResample(
+    private fun downmix(
         buffer: ByteBuffer,
         size: Int,
         channels: Int,
-        needsResample: Boolean,
-        resampleRatio: Double,
-        accumulator: Double,
-    ): Pair<FloatArray, Double> {
+        floatPcm: Boolean,
+    ): FloatArray {
         buffer.order(ByteOrder.LITTLE_ENDIAN)
-        buffer.position(0)
-
-        val totalSamples = size / 2
-        val monoSamples = totalSamples / channels
-
-        if (!needsResample) {
-            val result = FloatArray(monoSamples)
-            for (i in 0 until monoSamples) {
-                var sum = 0f
-                for (ch in 0 until channels) {
-                    sum += buffer.short.toFloat() / 32768f
-                }
-                result[i] = sum / channels
-            }
-            return result to accumulator
-        }
-
-        val mono = FloatArray(monoSamples)
-        for (i in 0 until monoSamples) {
+        val bytesPerSample = if (floatPcm) 4 else 2
+        val frames = size / bytesPerSample / channels
+        val mono = FloatArray(frames)
+        for (i in 0 until frames) {
             var sum = 0f
             for (ch in 0 until channels) {
-                sum += buffer.short.toFloat() / 32768f
+                sum += if (floatPcm) buffer.float else buffer.short / 32768f
             }
             mono[i] = sum / channels
         }
-
-        val outputEstimate = (monoSamples / resampleRatio).toInt() + 1
-        val output = FloatArray(outputEstimate)
-        var outIdx = 0
-        var acc = accumulator
-
-        while (acc < monoSamples - 1 && outIdx < outputEstimate) {
-            if (acc >= 0) {
-                val idx0 = acc.toInt()
-                val frac = (acc - idx0).toFloat()
-                output[outIdx] = mono[idx0] * (1f - frac) + mono[idx0 + 1] * frac
-                outIdx++
-            }
-            acc += resampleRatio
-        }
-
-        val newAccumulator = acc - monoSamples
-        return output.copyOf(outIdx) to newAccumulator
+        return mono
     }
 }

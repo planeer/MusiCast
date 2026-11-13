@@ -113,7 +113,11 @@ class EpisodeProcessor(
             if (segments != null) {
                 localDataSource.updateAnalysisStatus(episode.id, AnalysisStatus.COMPLETED)
                 localDataSource.saveSegments(episode.id, segments)
-                if (playbackManager.state.value.episode?.id == episode.id) {
+                // Only if it's playing the analyzed file: an episode that started
+                // streaming before its download finished may differ from the file
+                // (e.g. dynamically inserted ads), so the segments wouldn't line up.
+                val playing = playbackManager.state.value.episode
+                if (playing?.id == episode.id && playing.downloadPath != null) {
                     playbackManager.setSegments(segments)
                 }
             } else {

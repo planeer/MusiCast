@@ -29,6 +29,19 @@ class MusicDetector(
     suspend fun analyzeFile(
         filePath: String,
         onProgress: (Float) -> Unit = {},
+    ): List<AudioSegment>? = analyze { onChunk -> pcmDecoder.decodeFile(filePath, onProgress, onChunk) }
+
+    /**
+     * Analyzes audio from a URL and returns speech/music segments.
+     * [onProgress] is called with values 0.0..1.0 as analysis advances.
+     */
+    suspend fun analyzeUrl(
+        url: String,
+        onProgress: (Float) -> Unit = {},
+    ): List<AudioSegment>? = analyze { onChunk -> pcmDecoder.decodeUrl(url, onProgress, onChunk) }
+
+    private suspend fun analyze(
+        decode: suspend (onChunk: (FloatArray) -> Unit) -> Boolean,
     ): List<AudioSegment>? {
         if (!yamNetClassifier.loadModel()) {
             println("MusicDetector: failed to load YAMNet model")
@@ -42,52 +55,15 @@ class MusicDetector(
             // Decoders run a blocking loop, so check for cancellation per chunk
             // to stop promptly (e.g. when the download is removed mid-analysis).
             val job = currentCoroutineContext().job
-            val success = pcmDecoder.decodeFile(filePath, onProgress) { chunk ->
+            val success = decode { chunk ->
                 job.ensureActive()
                 windowBuffer.add(chunk) { window ->
                     val scores = yamNetClassifier.classify(window)
-                    if (scores != null) {
-                        windowScores.add(scores)
-                    } else {
-                        classifyFailures++
-                    }
-                }
-            }
-            println("MusicDetector: decode=${success}, windows=${windowScores.size}, failures=$classifyFailures")
-            if (!success) return null
-            val segments = segmentClassifier.classify(windowScores)
-            println("MusicDetector: produced ${segments.size} segments")
-            return segments
-        } finally {
-            yamNetClassifier.close()
-        }
-    }
-
-    /**
-     * Analyzes audio from a URL and returns speech/music segments.
-     * [onProgress] is called with values 0.0..1.0 as analysis advances.
-     */
-    suspend fun analyzeUrl(
-        url: String,
-        onProgress: (Float) -> Unit = {},
-    ): List<AudioSegment>? {
-        if (!yamNetClassifier.loadModel()) {
-            println("MusicDetector: failed to load YAMNet model")
-            return null
-        }
-        try {
-            val windowScores = mutableListOf<FloatArray>()
-            val windowBuffer = StreamingWindowBuffer()
-            var classifyFailures = 0
-
-            val success = pcmDecoder.decodeUrl(url, onProgress) { chunk ->
-                windowBuffer.add(chunk) { window ->
-                    val scores = yamNetClassifier.classify(window)
-                    if (scores != null) {
-                        windowScores.add(scores)
-                    } else {
-                        classifyFailures++
-                    }
+                    if (scores == null) classifyFailures++
+                    // Segment times are derived from the window index, so a failed
+                    // window must still take up its slot or every later segment
+                    // shifts 975 ms earlier. An empty score array classifies as speech.
+                    windowScores.add(scores ?: FloatArray(0))
                 }
             }
             println("MusicDetector: decode=${success}, windows=${windowScores.size}, failures=$classifyFailures")
@@ -106,5 +82,14 @@ class MusicDetector(
     fun getContentTypeAt(segments: List<AudioSegment>, positionMs: Long): ContentType {
         return segments.firstOrNull { positionMs in it.startMs..it.endMs }?.type
             ?: ContentType.SPEECH
+    }
+
+    companion object {
+        /**
+         * Bump whenever a pipeline change alters the segments produced for the
+         * same audio, so stored results are discarded and episodes re-analyzed.
+         * 2: fixed resampler sample loss that made segment times drift early.
+         */
+        const val ANALYSIS_VERSION = 2
     }
 }
