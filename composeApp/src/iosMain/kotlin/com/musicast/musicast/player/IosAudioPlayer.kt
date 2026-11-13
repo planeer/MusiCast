@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import platform.AVFoundation.AVPlayer
 import platform.AVFoundation.AVPlayerItem
+import platform.AVFoundation.AVURLAsset
+import platform.AVFoundation.AVURLAssetPreferPreciseDurationAndTimingKey
 import platform.AVFoundation.AVPlayerItemDidPlayToEndTimeNotification
 import platform.AVFoundation.AVPlayerItemStatusReadyToPlay
 import platform.AVFoundation.AVPlayerTimeControlStatusPlaying
@@ -34,6 +36,7 @@ class IosAudioPlayer : AudioPlayer {
     private var timeObserver: Any? = null
     private var endObserver: NSObjectProtocol? = null
     private var currentSpeed: Float = 1.0f
+    private var isLocalFile = false
 
     private val _positionMs = MutableStateFlow(0L)
     override val positionMs: StateFlow<Long> = _positionMs.asStateFlow()
@@ -46,7 +49,18 @@ class IosAudioPlayer : AudioPlayer {
 
     private fun setupPlayer(url: NSURL) {
         release()
-        val item = AVPlayerItem(uRL = url)
+        // Precise timing makes AVFoundation index MP3s instead of estimating
+        // positions from the bitrate, so seeks land where segments expect.
+        // Only for local files: on a stream it can mean reading most of the file
+        // up front, and streamed episodes have no segments to line up with.
+        isLocalFile = url.fileURL
+        val options: Map<Any?, Any?>? = if (isLocalFile) {
+            mapOf(AVURLAssetPreferPreciseDurationAndTimingKey to true)
+        } else {
+            null
+        }
+        val asset = AVURLAsset(uRL = url, options = options)
+        val item = AVPlayerItem(asset = asset)
         val avPlayer = AVPlayer(playerItem = item)
         player = avPlayer
 
@@ -108,7 +122,13 @@ class IosAudioPlayer : AudioPlayer {
 
     override fun seekTo(positionMs: Long) {
         val time = CMTimeMake(value = positionMs, timescale = 1000)
-        player?.seekToTime(time)
+        if (isLocalFile) {
+            // Exact seeks so playback lines up with the analyzed segments
+            val exact = CMTimeMake(value = 0, timescale = 1)
+            player?.seekToTime(time, toleranceBefore = exact, toleranceAfter = exact)
+        } else {
+            player?.seekToTime(time)
+        }
         _positionMs.value = positionMs
     }
 

@@ -18,7 +18,12 @@ val commonModule = module {
     single { RssParser() }
     single { RssFeedService(get()) }
     single { PodcastDatabase(get()) }
-    single { LocalDataSource(get()).apply { resetInterruptedAnalyses() } }
+    single {
+        LocalDataSource(get()).apply {
+            resetInterruptedAnalyses()
+            invalidateStaleAnalyses(MusicDetector.ANALYSIS_VERSION)
+        }
+    }
     single { PodcastRepository(get(), get()) }
 
     // Audio

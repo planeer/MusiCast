@@ -64,9 +64,7 @@ actual class PcmDecoder actual constructor() {
         val sourceSampleRate = processingFormat.sampleRate.toInt()
         val channelCount = processingFormat.channelCount.toInt()
         val totalFrames = audioFile.length
-        val targetRate = AudioConstants.SAMPLE_RATE
-        val needsResample = sourceSampleRate != targetRate
-        val resampleRatio = if (needsResample) sourceSampleRate.toDouble() / targetRate else 1.0
+        val resampler = LinearResampler(sourceSampleRate)
 
         val chunkSize = 16384u
         val buffer = AVAudioPCMBuffer(
@@ -107,7 +105,7 @@ actual class PcmDecoder actual constructor() {
                 }
             }
 
-            val output = if (needsResample) resample(mono, resampleRatio) else mono
+            val output = resampler.process(mono)
             if (output.isNotEmpty()) {
                 onChunk(output)
             }
@@ -122,19 +120,5 @@ actual class PcmDecoder actual constructor() {
             }
         }
         onProgress(1f)
-    }
-
-    private fun resample(input: FloatArray, ratio: Double): FloatArray {
-        val outputSize = (input.size / ratio).toInt()
-        if (outputSize <= 0) return FloatArray(0)
-        val output = FloatArray(outputSize)
-        for (i in output.indices) {
-            val srcIdx = i * ratio
-            val idx0 = srcIdx.toInt().coerceAtMost(input.size - 1)
-            val idx1 = (idx0 + 1).coerceAtMost(input.size - 1)
-            val frac = (srcIdx - idx0).toFloat()
-            output[i] = input[idx0] * (1f - frac) + input[idx1] * frac
-        }
-        return output
     }
 }

@@ -88,6 +88,9 @@ UPDATE episode SET segments_data = ? WHERE id = ?;
 resetInterruptedAnalyses:
 UPDATE episode SET analysis_status = 'NONE' WHERE analysis_status = 'IN_PROGRESS';
 
+resetAllAnalyses:
+UPDATE episode SET analysis_status = 'NONE', segments_data = NULL WHERE analysis_status != 'NONE';
+
 selectSegmentsData:
 SELECT segments_data FROM episode WHERE id = ?;
 

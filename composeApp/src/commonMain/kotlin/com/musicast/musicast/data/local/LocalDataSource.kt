@@ -124,6 +124,19 @@ class LocalDataSource(private val db: PodcastDatabase) {
     }
 
     /**
+     * Discards stored analysis results produced by an older analysis pipeline,
+     * so affected episodes are re-analyzed the next time they are played.
+     */
+    fun invalidateStaleAnalyses(currentVersion: Int) {
+        val stored = getSetting(KEY_ANALYSIS_VERSION)?.toIntOrNull() ?: 1
+        if (stored >= currentVersion) return
+        db.podcastDatabaseQueries.transaction {
+            db.podcastDatabaseQueries.resetAllAnalyses()
+            setSetting(KEY_ANALYSIS_VERSION, currentVersion.toString())
+        }
+    }
+
+    /**
      * Analysis runs in-process, so anything still IN_PROGRESS at startup was
      * interrupted (app killed). Reset it so playback re-triggers analysis.
      */
@@ -171,5 +184,9 @@ class LocalDataSource(private val db: PodcastDatabase) {
 
     fun setSetting(key: String, value: String) {
         db.podcastDatabaseQueries.setSetting(key, value_ = value)
+    }
+
+    private companion object {
+        const val KEY_ANALYSIS_VERSION = "analysis_version"
     }
 }
