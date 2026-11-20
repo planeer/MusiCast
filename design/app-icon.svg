@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108">
+  <!-- Source artwork for the app icon, on the 108x108 adaptive-icon canvas (visible area 18..90).
+       Android: mirrored by res/drawable/ic_launcher_{background,foreground,monochrome}.xml.
+       iOS: rsvg-convert with viewBox="18 18 72 72" at 1024px, then strip alpha
+       (magick - -alpha off) into iosApp/iosApp/Assets.xcassets/AppIcon.appiconset/app-icon-1024.png. -->
+  <defs><radialGradient id="bg" gradientUnits="userSpaceOnUse" cx="32" cy="27" r="97"><stop offset="0" stop-color="#0F4A41"/><stop offset="1" stop-color="#0A2622"/></radialGradient></defs>
+  <rect width="108" height="108" fill="url(#bg)"/>
+  <g transform="translate(-0.5,0.5)">
+    <path fill="#5ADBC6" d="M29,50a3,3 0,0 1,6 0v8a3,3 0,0 1,-6 0z M38,41a3,3 0,0 1,6 0v26a3,3 0,0 1,-6 0z M47,46a3,3 0,0 1,6 0v16a3,3 0,0 1,-6 0z"/>
+    <path fill="#FFB95C" d="M67,35H71.5C72,41 81,43.5 80,53C79.6,55.5 78.6,57.5 77.5,59C78.8,52 75.5,47.5 71.5,46V66A8,6.5 0,1 1,67 60.2Z"/>
+  </g>
+</svg>
